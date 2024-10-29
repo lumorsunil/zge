@@ -194,22 +194,7 @@ pub const RigidBodyFlat = struct {
 
 const RBShape = RigidBodyStaticParams.Shape;
 fn globalCheckCollision(shapeA: RBShape, shapeB: RBShape, dynamicA: RigidBodyDynamicParams, dynamicB: RigidBodyDynamicParams) CollisionResult {
-    switch (shapeA) {
-        .circle => |circleA| {
-            switch (shapeB) {
-                .circle => |circleB| return checkCollisionCircles(circleA, circleB, dynamicA, dynamicB),
-                else => return .noCollision,
-            }
-        },
-        .rectangle => |rectA| {
-            switch (shapeB) {
-                .rectangle => |rectB| return checkCollisionRectangles(rectA, rectB, dynamicA, dynamicB),
-                else => return .noCollision,
-            }
-        },
-    }
-
-    return .noCollision;
+    return checkCollisionShapes(shapeA, shapeB, dynamicA, dynamicB);
 }
 
 pub const CollisionResult = union(enum) {
@@ -234,7 +219,166 @@ fn checkCollisionCircles(circleA: RBShape.Circle, circleB: RBShape.Circle, dynam
     } };
 }
 
-fn checkCollisionRectangles(rectA: RBShape.Rectangle, rectB: RBShape.Rectangle, dynamicA: RigidBodyDynamicParams, dynamicB: RigidBodyDynamicParams) CollisionResult {
+const MinMaxProjections = struct {
+    maxA: f32,
+    minA: f32,
+    maxB: f32,
+    minB: f32,
+
+    pub fn overlaps(self: MinMaxProjections) bool {
+        return self.maxB > self.minA and self.maxA > self.minB;
+    }
+
+    pub fn overlap(self: MinMaxProjections) f32 {
+        return @min(self.maxB - self.minA, self.maxA - self.minB);
+    }
+};
+
+fn SATproject(axis: zlm.Vec2, shapeA: RBShape, shapeB: RBShape, vA: []const zlm.Vec2, vB: []const zlm.Vec2) MinMaxProjections {
+    var minA = std.math.inf(f32);
+    var maxA = -std.math.inf(f32);
+    var minB = std.math.inf(f32);
+    var maxB = -std.math.inf(f32);
+
+    SATprojectShape(axis, shapeA, vA, &maxA, &minA);
+    SATprojectShape(axis, shapeB, vB, &maxB, &minB);
+
+    return MinMaxProjections{ .maxA = maxA, .minA = minA, .maxB = maxB, .minB = minB };
+}
+
+fn SATprojectShape(axis: zlm.Vec2, shape: RBShape, v: []const zlm.Vec2, max: *f32, min: *f32) void {
+    switch (shape) {
+        .circle => |circle| {
+            std.debug.assert(v.len == 1);
+            const center = v[0];
+            SATprojectCircle(axis, center, circle.radius, max, min);
+        },
+        .rectangle => |_| {
+            SATprojectPolygon(axis, v, max, min);
+        },
+    }
+}
+
+fn SATprojectPolygon(axis: zlm.Vec2, v: []const zlm.Vec2, max: *f32, min: *f32) void {
+    for (0..v.len) |i| {
+        const proj = v[i].dot(axis);
+
+        max.* = @max(max.*, proj);
+        min.* = @min(min.*, proj);
+    }
+}
+
+fn SATprojectCircle(axis: zlm.Vec2, center: zlm.Vec2, radius: f32, max: *f32, min: *f32) void {
+    const direction = axis.normalize();
+    const directionAndRadius = direction.scale(radius);
+
+    const v0 = center.add(directionAndRadius);
+    const v1 = center.sub(directionAndRadius);
+
+    const proj0 = v0.dot(axis);
+    const proj1 = v1.dot(axis);
+
+    min.* = @min(proj0, proj1);
+    max.* = @max(proj0, proj1);
+}
+
+const MAX_AXIS = 4;
+fn SATgetTestAxis(shape: RBShape, v: []const zlm.Vec2, other: []const zlm.Vec2, buffer: *[MAX_AXIS]zlm.Vec2) []zlm.Vec2 {
+    return switch (shape) {
+        .circle => SATgetTestAxisCircle(v, other, buffer),
+        .rectangle => SATgetTestAxisPolygon(v, buffer),
+    };
+}
+
+fn SATgetTestAxisCircle(v: []const zlm.Vec2, other: []const zlm.Vec2, buffer: *[MAX_AXIS]zlm.Vec2) []zlm.Vec2 {
+    std.debug.assert(v.len == 1);
+
+    const c = v[0];
+    var minDistance = std.math.inf(f32);
+    var minDistanceVertex: zlm.Vec2 = zlm.Vec2.zero;
+
+    for (0..other.len) |i| {
+        const distance = other[i].distance2(c);
+
+        if (distance < minDistance) {
+            minDistance = distance;
+            minDistanceVertex = other[i];
+        }
+    }
+
+    const axis = minDistanceVertex.sub(c);
+    buffer[0] = axis;
+
+    return buffer[0..1];
+}
+
+fn SATgetTestAxisPolygon(v: []const zlm.Vec2, buffer: *[MAX_AXIS]zlm.Vec2) []zlm.Vec2 {
+    for (0..v.len) |i| {
+        const v0 = v[i];
+        const v1 = v[@mod(i + 1, v.len)];
+
+        const edge = v1.sub(v0);
+        const axis = zlm.vec2(-edge.y, edge.x);
+
+        buffer[i] = axis;
+    }
+
+    return buffer[0..v.len];
+}
+
+fn SATtestCollision(shapeA: RBShape, shapeB: RBShape, vA: []const zlm.Vec2, vB: []const zlm.Vec2, minDepth: *f32, minAxis: *zlm.Vec2) bool {
+    var axisBuffer: [MAX_AXIS]zlm.Vec2 = undefined;
+
+    const axii = SATgetTestAxis(shapeA, vA, vB, &axisBuffer);
+
+    for (axii) |axis| {
+        const projections = SATproject(axis, shapeA, shapeB, vA, vB);
+
+        if (!projections.overlaps()) {
+            return false;
+        }
+
+        const depth = projections.overlap();
+
+        if (depth < minDepth.*) {
+            minDepth.* = depth;
+            minAxis.* = axis;
+        }
+    }
+
+    return true;
+}
+
+fn transformVertices(shape: RBShape, translation: zlm.Vec2, rotation: f32, buffer: []zlm.Vec2) []zlm.Vec2 {
+    return switch (shape) {
+        .rectangle => |rectangle| transformVerticesRectangle(&rectangle.vertices, translation, rotation, buffer),
+        .circle => transformVerticesCircle(translation, buffer),
+    };
+}
+
+fn transformVertex(v: zlm.Vec2, translation: zlm.Vec2, rotation: f32) zlm.Vec2 {
+    return v.rotate(rotation).add(translation);
+}
+
+fn transformVerticesRectangle(v: []const zlm.Vec2, translation: zlm.Vec2, rotation: f32, buffer: []zlm.Vec2) []zlm.Vec2 {
+    std.debug.assert(v.len <= buffer.len);
+
+    for (0..v.len) |i| {
+        buffer[i] = transformVertex(v[i], translation, rotation);
+    }
+
+    return buffer[0..v.len];
+}
+
+fn transformVerticesCircle(translation: zlm.Vec2, buffer: []zlm.Vec2) []zlm.Vec2 {
+    std.debug.assert(buffer.len > 1);
+
+    buffer[0] = translation;
+
+    return buffer[0..1];
+}
+
+fn checkCollisionShapes(shapeA: RBShape, shapeB: RBShape, dynamicA: RigidBodyDynamicParams, dynamicB: RigidBodyDynamicParams) CollisionResult {
     var minDepth = std.math.inf(f32);
     var minAxis = zlm.vec2(std.math.inf(f32), std.math.inf(f32));
 
@@ -243,90 +387,18 @@ fn checkCollisionRectangles(rectA: RBShape.Rectangle, rectB: RBShape.Rectangle, 
     const rA = dynamicA.r;
     const rB = dynamicB.r;
 
-    var tvA: [4]zlm.Vec2 = undefined;
-    for (0..rectA.vertices.len) |i| {
-        tvA[i] = rectA.vertices[i].rotate(rA).add(pA);
+    var tvABuffer: [4]zlm.Vec2 = undefined;
+    const tvA = transformVertices(shapeA, pA, rA, &tvABuffer);
+
+    var tvBBuffer: [4]zlm.Vec2 = undefined;
+    const tvB = transformVertices(shapeB, pB, rB, &tvBBuffer);
+
+    if (!SATtestCollision(shapeA, shapeB, tvA, tvB, &minDepth, &minAxis)) {
+        return .noCollision;
     }
 
-    var tvB: [4]zlm.Vec2 = undefined;
-    for (0..rectB.vertices.len) |i| {
-        tvB[i] = rectB.vertices[i].rotate(rB).add(pB);
-    }
-
-    for (0..tvA.len) |i| {
-        const v0 = tvA[i];
-        const v1 = tvA[@mod(i + 1, tvA.len)];
-
-        const edge = v1.sub(v0);
-        const axis = zlm.vec2(-edge.y, edge.x);
-
-        var minA = std.math.inf(f32);
-        var maxA = -std.math.inf(f32);
-        var minB = std.math.inf(f32);
-        var maxB = -std.math.inf(f32);
-
-        for (0..tvA.len) |j| {
-            const proj = tvA[j].dot(axis);
-
-            minA = @min(minA, proj);
-            maxA = @max(maxA, proj);
-        }
-
-        for (0..tvB.len) |j| {
-            const proj = tvB[j].dot(axis);
-
-            minB = @min(minB, proj);
-            maxB = @max(maxB, proj);
-        }
-
-        if (maxA <= minB or maxB <= minA) {
-            return .noCollision;
-        }
-
-        const depth = @min(maxB - minA, maxA - minB);
-
-        if (depth < minDepth) {
-            minDepth = depth;
-            minAxis = axis;
-        }
-    }
-
-    for (0..tvB.len) |i| {
-        const v0 = tvB[i];
-        const v1 = tvB[@mod(i + 1, tvB.len)];
-
-        const edge = v1.sub(v0);
-        const axis = zlm.vec2(-edge.y, edge.x);
-
-        var minB = std.math.inf(f32);
-        var maxB = -std.math.inf(f32);
-        var minA = std.math.inf(f32);
-        var maxA = -std.math.inf(f32);
-
-        for (0..tvB.len) |j| {
-            const proj = tvB[j].dot(axis);
-
-            minB = @min(minB, proj);
-            maxB = @max(maxB, proj);
-        }
-
-        for (0..tvA.len) |j| {
-            const proj = tvA[j].dot(axis);
-
-            minA = @min(minA, proj);
-            maxA = @max(maxA, proj);
-        }
-
-        if (maxA <= minB or maxB <= minA) {
-            return .noCollision;
-        }
-
-        const depth = @min(maxB - minA, maxA - minB);
-
-        if (depth < minDepth) {
-            minDepth = depth;
-            minAxis = axis;
-        }
+    if (!SATtestCollision(shapeB, shapeA, tvB, tvA, &minDepth, &minAxis)) {
+        return .noCollision;
     }
 
     const direction = pB.sub(pA);
