@@ -12,6 +12,7 @@ const Camera = @import("camera.zig").Camera;
 const CollisionEvent = @import("physics.zig").CollisionEvent;
 
 const RigidBody = @import("physics/rigid-body.zig").RigidBodyFlat;
+const Rectangle = @import("physics/shape.zig").Shape.Rectangle;
 const Densities = @import("physics/rigid-body.zig").Densities;
 
 pub const DebugScene = struct {
@@ -74,7 +75,7 @@ pub const DebugScene = struct {
         }
 
         const result = RigidBody.init(
-            .{ .rectangle = RigidBody.Shape.Rectangle.init(zlm.vec2(10 + 20 * self.rand.random().float(f32), 10 + 20 * self.rand.random().float(f32))) },
+            .{ .rectangle = Rectangle.init(zlm.vec2(10 + 20 * self.rand.random().float(f32), 10 + 20 * self.rand.random().float(f32))) },
             Densities.Water,
             0,
             false,

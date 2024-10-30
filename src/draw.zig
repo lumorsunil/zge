@@ -4,6 +4,8 @@ const zlm = @import("zlm");
 const ecs = @import("ecs");
 
 const RigidBody = @import("physics/rigid-body.zig").RigidBodyFlat;
+const Circle = @import("physics/shape.zig").Shape.Circle;
+const Rectangle = @import("physics/shape.zig").Shape.Rectangle;
 const Camera = @import("camera.zig").Camera;
 
 const cfg = @import("config.zig");
@@ -50,7 +52,7 @@ pub const DrawSystem = struct {
         }
     }
 
-    pub fn drawCircle(circle: RigidBody.Shape.Circle, rb: RigidBody, camera: Camera) void {
+    pub fn drawCircle(circle: Circle, rb: RigidBody, camera: Camera) void {
         const s = camera.s;
 
         const screenP = camera.v(screenPosition(rb.d.p.x, rb.d.p.y));
@@ -58,7 +60,7 @@ pub const DrawSystem = struct {
         rl.drawCircleLinesV(screenP, circle.radius * s, rl.Color.white);
     }
 
-    pub fn drawRectangle(rect: RigidBody.Shape.Rectangle, rb: RigidBody, camera: Camera) void {
+    pub fn drawRectangle(rect: Rectangle, rb: RigidBody, camera: Camera) void {
         const s = camera.s;
         const p = rb.d.p.sub(rect.size.scale(1 / 2));
 
