@@ -1,11 +1,14 @@
 const std = @import("std");
+const ArrayList = std.ArrayList;
+const Allocator = std.mem.Allocator;
 const rl = @import("raylib");
 const zlm = @import("zlm");
 const ecs = @import("ecs");
+const util = @import("util.zig");
 
-const RigidBody = @import("physics/rigid-body.zig").RigidBodyFlat;
-const Circle = @import("physics/shape.zig").Shape.Circle;
-const Rectangle = @import("physics/shape.zig").Shape.Rectangle;
+const RigidBody = @import("physics/rigid-body-flat.zig").RigidBodyFlat;
+const Circle = @import("physics/shape.zig").Circle;
+const Rectangle = @import("physics/shape.zig").Rectangle;
 const Camera = @import("camera.zig").Camera;
 
 const cfg = @import("config.zig");
@@ -15,17 +18,44 @@ const screenPositionV = @import("screen.zig").screenPositionV;
 
 pub const DrawSystem = struct {
     view: ecs.BasicView(RigidBody),
+    drawOrderList: ArrayList(ecs.Entity),
+    allocator: Allocator,
 
-    pub fn init(reg: *ecs.Registry) DrawSystem {
+    pub fn init(allocator: Allocator, reg: *ecs.Registry) !DrawSystem {
         return DrawSystem{
             .view = reg.basicView(RigidBody),
+            .drawOrderList = try ArrayList(ecs.Entity).initCapacity(allocator, 100),
+            .allocator = allocator,
         };
     }
 
-    pub fn draw(self: *const DrawSystem, camera: Camera) void {
-        for (self.view.raw()) |body| {
+    pub fn deinit(self: DrawSystem) void {
+        self.drawOrderList.deinit();
+    }
+
+    pub fn draw(self: *DrawSystem, camera: Camera) void {
+        for (self.drawOrder()) |entity| {
+            const body = self.view.getConst(entity);
+
             DrawSystem.drawShape(body, camera);
         }
+    }
+
+    fn minYComparer(self: *DrawSystem, a: ecs.Entity, b: ecs.Entity) bool {
+        const bodyA = self.view.getConst(a);
+        const bodyB = self.view.getConst(b);
+
+        return bodyA.d.p.y.* < bodyB.d.p.y.*;
+    }
+
+    fn drawOrder(self: *DrawSystem) []const ecs.Entity {
+        self.drawOrderList.clearRetainingCapacity();
+        self.drawOrderList.ensureTotalCapacity(self.view.len()) catch unreachable;
+        self.drawOrderList.expandToCapacity();
+
+        util.sortTo(ecs.Entity, self.view.data(), self.drawOrderList.items[0..self.view.len()], self, minYComparer);
+
+        return self.drawOrderList.items[0..self.view.len()];
     }
 
     pub fn drawTexture(texture: *const rl.Texture2D, position: rl.Vector2, rotation: f32, scale: f32, camera: Camera) void {
@@ -55,21 +85,22 @@ pub const DrawSystem = struct {
     pub fn drawCircle(circle: Circle, rb: RigidBody, camera: Camera) void {
         const s = camera.s;
 
-        const screenP = camera.v(screenPosition(rb.d.p.x, rb.d.p.y));
+        const screenP = camera.v(screenPosition(rb.d.p.x.*, rb.d.p.y.*));
 
         rl.drawCircleLinesV(screenP, circle.radius * s, rl.Color.white);
     }
 
     pub fn drawRectangle(rect: Rectangle, rb: RigidBody, camera: Camera) void {
         const s = camera.s;
-        const p = rb.d.p.sub(rect.size.scale(1 / 2));
+        const halfRect = rect.size.scale(1 / 2);
+        const p = zlm.vec2(rb.d.p.x.*, rb.d.p.y.*).sub(halfRect);
 
         const screenP = camera.v(screenPosition(p.x, p.y));
 
         var transformedVertices: [5]rl.Vector2 = undefined;
 
         for (0..4) |i| {
-            const v = rect.vertices[i].rotate(rb.d.r).scale(s).add(zlm.vec2(screenP.x, screenP.y));
+            const v = rect.vertices[i].rotate(rb.d.r.*).scale(s).add(zlm.vec2(screenP.x, screenP.y));
             transformedVertices[i] = rl.Vector2.init(v.x, v.y);
         }
         transformedVertices[4] = transformedVertices[0];
