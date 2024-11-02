@@ -13,10 +13,17 @@ pub const AABB = struct {
     }
 
     pub fn ensureContains(self: *AABB, aabb: AABB) void {
-        self.tl.x = @min(self.tl.x, aabb.tl.x);
-        self.tl.y = @min(self.tl.y, aabb.tl.y);
-        self.br.x = @max(self.br.x, aabb.br.x);
-        self.br.y = @max(self.br.y, aabb.br.y);
+        if (self.area() == 0) {
+            self.*.tl.x = aabb.tl.x;
+            self.*.tl.y = aabb.tl.y;
+            self.*.br.x = aabb.br.x;
+            self.*.br.y = aabb.br.y;
+        } else {
+            self.*.tl.x = @min(self.tl.x, aabb.tl.x);
+            self.*.tl.y = @min(self.tl.y, aabb.tl.y);
+            self.*.br.x = @max(self.br.x, aabb.br.x);
+            self.*.br.y = @max(self.br.y, aabb.br.y);
+        }
     }
 
     pub fn intersects(self: AABB, other: AABB) bool {
@@ -161,7 +168,7 @@ pub const Rectangle = struct {
     }
 
     pub fn height(self: Rectangle) f32 {
-        return self.size.x;
+        return self.size.y;
     }
 
     pub fn area(self: Rectangle) f32 {

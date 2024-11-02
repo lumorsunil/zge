@@ -15,15 +15,20 @@ const INTERSECTING_INITIAL_CAPACITY = 10;
 const MAX_ENTRIES_IN_NODE = 10;
 const MIN_ENTRIES_IN_NODE = 2;
 
-/// Extends type must implement method:
+/// Extends type must implement methods:
 /// ```zig
-/// fn aabb(self: @This()) AABB
+/// fn aabb(self: Entry(Key, Value, Ext)) AABB
+/// fn id(self: Entry(Key, Value, Ext)) <unsigned integer>
 ///
 /// // Example:
 ///
 /// const MyEntryExtension = struct {
-///     pub fn aabb(self: Entry(Key, Value)) AABB {
-///         return self.key.aabb();
+///     pub fn aabb(self: MyEntry) AABB {
+///         return ...;
+///     }
+///
+///     pub fn id(self: MyEntry) <unsigned integer> {
+///         return ...;
 ///     }
 /// };
 ///
@@ -48,7 +53,7 @@ pub fn RTree(comptime EntryType: type) type {
 
         const Self = @This();
 
-        const Node = union(enum) {
+        pub const Node = union(enum) {
             entry: NodeEntry,
             page: *Page,
 
@@ -78,7 +83,7 @@ pub fn RTree(comptime EntryType: type) type {
 
             pub fn aabb(self: Node) AABB {
                 return switch (self) {
-                    .entry => |entry| entry.entry.aabb(),
+                    .entry => |entry| EntryType.aabb(entry.entry),
                     .page => |page| page.*.aabb,
                 };
             }
@@ -103,7 +108,7 @@ pub fn RTree(comptime EntryType: type) type {
             }
         };
 
-        const Page = struct {
+        pub const Page = struct {
             aabb: AABB,
             children: ArrayList(Node),
             parent: ?*Page,
@@ -112,7 +117,7 @@ pub fn RTree(comptime EntryType: type) type {
                 const page = allocator.create(Page) catch unreachable;
                 page.* = Page{
                     .aabb = aabb,
-                    .children = ArrayList(Node).initCapacity(allocator, MAX_ENTRIES_IN_NODE) catch unreachable,
+                    .children = ArrayList(Node).initCapacity(allocator, MAX_ENTRIES_IN_NODE + 1) catch unreachable,
                     .parent = parent,
                 };
 
@@ -157,18 +162,26 @@ pub fn RTree(comptime EntryType: type) type {
             }
 
             pub fn append(self: *Page, node: Node, keyToNodeMap: *ArrayList(*Node)) void {
+                const oldArea = self.aabb;
                 self.children.append(node) catch unreachable;
                 const appendedNode = &self.children.items[self.children.items.len - 1];
                 appendedNode.setParent(self);
 
+                var entryKey: i32 = -1;
                 switch (appendedNode.*) {
                     .entry => |entry| {
-                        keyToNodeMap.ensureTotalCapacity(entry.entry.key) catch unreachable;
-                        keyToNodeMap.expandToCapacity();
-                        keyToNodeMap.items[entry.entry.key] = appendedNode;
+                        const entryId = EntryType.id(entry.entry);
+                        keyToNodeMap.*.ensureTotalCapacity(entryId + 1) catch unreachable;
+                        keyToNodeMap.*.expandToCapacity();
+                        keyToNodeMap.*.items[entryId] = appendedNode;
+                        entryKey = @truncate(@as(i64, @intCast(entryId)));
                     },
                     .page => {},
                 }
+
+                self.ensureContains(node.aabb());
+
+                std.log.info("page append {s}:{}, old area {},{} new area {},{} child {},{}", .{ @tagName(node), entryKey, oldArea.tl, oldArea.br, self.aabb.tl, self.aabb.br, node.aabb().tl, node.aabb().br });
             }
 
             pub fn remove(self: *Page, allocator: Allocator, i: usize) void {
@@ -228,14 +241,12 @@ pub fn RTree(comptime EntryType: type) type {
                 newRootNode.append(Node{ .page = oldRootNode }, &self.keyToNodeMap);
                 newRootNode.append(rsn, &self.keyToNodeMap);
                 self.root = newRootNode;
-                self.root.ensureContains(oldRootNode.aabb);
-                self.root.ensureContains(rsn.aabb());
             }
         }
 
         fn insertEntryInner(self: *Self, entry: EntryType, entryAabb: AABB, page: *Page, level: usize) ?Node {
             if (level == self.height) {
-                return self.insertEntryIntoLeaf(entry, entryAabb, page);
+                return self.insertEntryIntoLeaf(entry, page);
             } else {
                 const minDifferencePage = page.findMinAabb(entryAabb).page;
 
@@ -253,19 +264,17 @@ pub fn RTree(comptime EntryType: type) type {
         fn insertNodeIntoPage(self: *Self, node: Node, page: *Page) ?Node {
             if (page.canAccomodate()) {
                 page.append(node, &self.keyToNodeMap);
-                page.ensureContains(node.aabb());
                 return null;
             } else {
                 return self.linearSplit(node, page);
             }
         }
 
-        fn insertEntryIntoLeaf(self: *Self, entry: EntryType, entryAabb: AABB, leaf: *Page) ?Node {
+        fn insertEntryIntoLeaf(self: *Self, entry: EntryType, leaf: *Page) ?Node {
             const entryNode = Node.initEntry(entry, leaf);
 
             if (leaf.canAccomodate()) {
                 leaf.append(entryNode, &self.keyToNodeMap);
-                leaf.ensureContains(entryAabb);
                 return null;
             } else {
                 return self.linearSplit(entryNode, leaf);
@@ -273,6 +282,7 @@ pub fn RTree(comptime EntryType: type) type {
         }
 
         fn linearSplit(self: *Self, node: Node, page: *Page) Node {
+            // TODO: Fix seg fault that happens after a split
             var newPage = Page.init(self.allocator, AABB{}, null);
 
             const currentPageChildren = page.children.toOwnedSlice() catch unreachable;
@@ -299,22 +309,17 @@ pub fn RTree(comptime EntryType: type) type {
             page.append(e1, &self.keyToNodeMap);
             newPage.append(e2, &self.keyToNodeMap);
 
-            page.ensureContains(e1.aabb());
-            newPage.ensureContains(e2.aabb());
-
             for (0..nodesInSplit.len) |i| {
-                if (newPage.children.items.len <= MIN_ENTRIES_IN_NODE - numberOfNodesInSplitLeft) {
+                if (newPage.children.items.len <= MIN_ENTRIES_IN_NODE -| numberOfNodesInSplitLeft) {
                     for (0..numberOfNodesToSplit) |j| {
                         const item = nodesInSplit[j] orelse unreachable;
                         newPage.append(item, &self.keyToNodeMap);
-                        newPage.ensureContains(item.aabb());
                     }
                     break;
-                } else if (page.children.items.len <= MIN_ENTRIES_IN_NODE - numberOfNodesInSplitLeft) {
+                } else if (page.children.items.len <= MIN_ENTRIES_IN_NODE -| numberOfNodesInSplitLeft) {
                     for (0..numberOfNodesToSplit) |j| {
                         const item = nodesInSplit[j] orelse continue;
                         page.append(item, &self.keyToNodeMap);
-                        page.ensureContains(item.aabb());
                     }
                     break;
                 } else {
@@ -325,16 +330,12 @@ pub fn RTree(comptime EntryType: type) type {
 
                     if (currentPageDiff < newPaggeDiff) {
                         page.append(e, &self.keyToNodeMap);
-                        page.ensureContains(eAabb);
                     } else if (newPaggeDiff < currentPageDiff) {
                         newPage.append(e, &self.keyToNodeMap);
-                        newPage.ensureContains(eAabb);
                     } else if (page.children.items.len < newPage.children.items.len) {
                         page.append(e, &self.keyToNodeMap);
-                        page.ensureContains(eAabb);
                     } else {
                         newPage.append(e, &self.keyToNodeMap);
-                        newPage.ensureContains(eAabb);
                     }
 
                     numberOfNodesInSplitLeft -= 1;
@@ -369,7 +370,9 @@ pub fn RTree(comptime EntryType: type) type {
         }
 
         pub fn updateEntry(self: *Self, entry: EntryType) void {
-            const node = self.keyToNodeMap.items[entry.key];
+            const entryId = EntryType.id(entry);
+            const node = self.keyToNodeMap.items[entryId];
+
             const aabb = node.aabb();
 
             self.ensureContainsBottomUp(node.getParent(), aabb);
@@ -386,7 +389,8 @@ pub fn RTree(comptime EntryType: type) type {
         }
 
         pub fn removeEntry(self: *Self, entry: EntryType) void {
-            const node = self.keyToNodeMap.items[entry.key];
+            const entryId = EntryType.id(entry);
+            const node = self.keyToNodeMap.items[entryId];
             node.remove(self.allocator);
         }
     };

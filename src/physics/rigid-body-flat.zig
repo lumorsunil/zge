@@ -22,7 +22,7 @@ pub const RigidBodyFlat = struct {
         };
     }
 
-    pub fn aabb(self: *const RigidBodyFlat) AABB {
+    pub fn aabb(self: RigidBodyFlat) AABB {
         return self.s.aabb();
     }
 

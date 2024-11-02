@@ -7,8 +7,10 @@ const ecs = @import("ecs");
 const util = @import("util.zig");
 
 const RigidBody = @import("physics/rigid-body-flat.zig").RigidBodyFlat;
+const AABB = @import("physics/shape.zig").AABB;
 const Circle = @import("physics/shape.zig").Circle;
 const Rectangle = @import("physics/shape.zig").Rectangle;
+const CollisionContainer = @import("physics/collision/container.zig").CollisionContainer;
 const Camera = @import("camera.zig").Camera;
 
 const cfg = @import("config.zig");
@@ -18,12 +20,14 @@ const screenPositionV = @import("screen.zig").screenPositionV;
 
 pub const DrawSystem = struct {
     view: ecs.BasicView(RigidBody),
+    ccView: ecs.BasicView(CollisionContainer),
     drawOrderList: ArrayList(ecs.Entity),
     allocator: Allocator,
 
     pub fn init(allocator: Allocator, reg: *ecs.Registry) !DrawSystem {
         return DrawSystem{
             .view = reg.basicView(RigidBody),
+            .ccView = reg.basicView(CollisionContainer),
             .drawOrderList = try ArrayList(ecs.Entity).initCapacity(allocator, 100),
             .allocator = allocator,
         };
@@ -39,6 +43,62 @@ pub const DrawSystem = struct {
 
             DrawSystem.drawShape(body, camera);
         }
+
+        self.drawCollisionContainer(camera);
+    }
+
+    const ccEntryColor = rl.Color.lime;
+
+    const ccLevelColors = [_]rl.Color{
+        rl.Color.green,
+        rl.Color.blue,
+        rl.Color.red,
+        rl.Color.yellow,
+        rl.Color.magenta,
+        rl.Color.orange,
+        rl.Color.black,
+    };
+
+    fn drawCollisionContainer(self: *DrawSystem, camera: Camera) void {
+        const cc = self.ccView.raw()[0];
+
+        self.drawPage(cc.tree.root, 1, cc.tree.height, camera);
+    }
+
+    fn drawPage(self: *DrawSystem, page: *CollisionContainer.RTree.Page, level: usize, height: usize, camera: Camera) void {
+        const color = ccLevelColors[height - level];
+
+        self.drawAabb(page.aabb, color, camera);
+
+        for (page.children.items) |child| {
+            self.drawNode(child, level + 1, height, camera);
+        }
+    }
+
+    fn drawNode(self: *DrawSystem, node: CollisionContainer.RTree.Node, level: usize, height: usize, camera: Camera) void {
+        switch (node) {
+            .page => |page| self.drawPage(page, level, height, camera),
+            .entry => |entry| self.drawEntry(entry.entry, camera),
+        }
+    }
+
+    fn drawEntry(self: *DrawSystem, entry: CollisionContainer.RTreeEntry, camera: Camera) void {
+        self.drawAabb(CollisionContainer.entryAabb(entry), ccEntryColor, camera);
+    }
+
+    fn drawAabb(self: *DrawSystem, aabb: AABB, color: rl.Color, camera: Camera) void {
+        _ = self;
+        const p = screenPositionV(camera.vxy(aabb.tl.x, aabb.tl.y));
+        rl.drawRectangleLinesEx(
+            rl.Rectangle.init(
+                p.x,
+                p.y,
+                aabb.width(),
+                aabb.height(),
+            ),
+            1,
+            color,
+        );
     }
 
     fn minYComparer(self: *DrawSystem, a: ecs.Entity, b: ecs.Entity) bool {

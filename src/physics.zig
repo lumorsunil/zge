@@ -33,18 +33,23 @@ pub const PhysicsSystem = struct {
 
     reg: *ecs.Registry,
     bodyContainer: RigidBodyContainer,
-    collisionContainer: CollisionContainer,
+    collisionContainer: *CollisionContainer,
 
     var numberOfPendingCollisions: usize = 0;
     var numberOfCollisionEvents: usize = 0;
 
     pub fn init(allocator: Allocator, reg: *ecs.Registry) !PhysicsSystem {
+        const cc = CollisionContainer.init(allocator, reg);
+        const cce = reg.create();
+        reg.add(cce, cc);
+        const ccPtr = reg.get(CollisionContainer, cce);
+
         return PhysicsSystem{
             .gravity = zlm.vec2(0, 9.8),
             .view = reg.basicView(RigidBody),
             .reg = reg,
             .bodyContainer = try RigidBodyContainer.init(allocator),
-            .collisionContainer = CollisionContainer.init(allocator),
+            .collisionContainer = ccPtr,
         };
     }
 
@@ -87,7 +92,8 @@ pub const PhysicsSystem = struct {
             const entityId = self.reg.entityId(entity);
             const body = self.view.get(entity);
             body.updateTransform();
-            self.collisionContainer.updateBody(entityId, body);
+            if (self.view.len() == 9) std.log.info("UPDATING {}", .{entityId});
+            self.collisionContainer.updateBody(entity);
         }
     }
 
@@ -220,7 +226,8 @@ pub const PhysicsSystem = struct {
         static: RigidBodyStaticParams,
     ) *RigidBody {
         const entityId = self.reg.entityId(entity);
-        var isPointersValidated: bool = false;
+        std.log.info("RIGID BODY ADDED {}", .{entityId});
+        var isPointersInvalidated: bool = false;
 
         self.bodyContainer.setRigidBody(
             entityId,
@@ -231,10 +238,11 @@ pub const PhysicsSystem = struct {
             0,
             0,
             static.isStatic,
-            &isPointersValidated,
+            &isPointersInvalidated,
         );
 
-        if (isPointersValidated) {
+        if (isPointersInvalidated) {
+            std.log.info("RIGID BODY POINTERS INVALIDATED", .{});
             self.updateRigidBodiesInRegistry();
         }
 
@@ -243,7 +251,7 @@ pub const PhysicsSystem = struct {
         self.reg.add(entity, RigidBody.init(static, dynamic));
         const body = self.view.get(entity);
 
-        self.collisionContainer.insertBody(entityId, body);
+        self.collisionContainer.insertBody(entity);
 
         return body;
     }
