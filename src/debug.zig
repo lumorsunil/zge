@@ -89,8 +89,6 @@ pub const DebugScene = struct {
 
         self.player = e;
 
-        const dynamic = self.physicsSystem.addRigidBody(e, position, false);
-
         const result = RigidBodyStaticParams.init(
             .{ .rectangle = Rectangle.init(size) },
             Densities.Water,
@@ -100,8 +98,7 @@ pub const DebugScene = struct {
 
         switch (result) {
             .success => |static| {
-                const body = RigidBody.init(static, dynamic);
-                self.reg.add(e, body);
+                _ = self.physicsSystem.addRigidBody(e, position, static);
             },
             .err => |err| std.log.err("{s}", .{err}),
         }
@@ -110,21 +107,16 @@ pub const DebugScene = struct {
     pub fn addRectangle(self: *DebugScene, position: zlm.Vec2, size: zlm.Vec2, isStatic: bool) void {
         const e = self.reg.create();
 
-        const dynamic = self.physicsSystem.addRigidBody(e, position, isStatic);
-
         const result = RigidBodyStaticParams.init(
             .{ .rectangle = Rectangle.init(size) },
             Densities.Element.Osmium,
             0.2,
-            false,
+            isStatic,
         );
 
         switch (result) {
             .success => |static| {
-                var body = RigidBody.init(static, dynamic);
-                body.moveAbsolute(position);
-                body.s.isStatic = isStatic;
-                self.reg.add(e, body);
+                _ = self.physicsSystem.addRigidBody(e, position, static);
             },
             .err => |err| std.log.err("{s}", .{err}),
         }

@@ -43,10 +43,6 @@ pub fn build(b: *std.Build) void {
     const zlm = zlm_dep.module("zlm");
     exe.root_module.addImport("zlm", zlm);
 
-    const kdtree_dep = b.dependency("kdtree", .{});
-    const kdtree = kdtree_dep.module("kdtree");
-    exe.root_module.addImport("kdtree", kdtree);
-
     const ztracy_dep = b.dependency("ztracy", .{
         .enable_ztracy = options.enable_ztracy,
     });

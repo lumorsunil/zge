@@ -36,10 +36,6 @@
             .hash = "1220342ac333965de915f74a8425e4848ffe46852da0e4789103f9ec650c3cd22456",
         },
         .ztracy = .{ .path = "ztracy" },
-        .kdtree = .{
-            .url = "git+https://github.com/travisstaloch/kd-tree#8cd88d8fe7b112afd681b8402b41424fb18d3d4b",
-            .hash = "122066f7c8c7bcd27affd83d26b9477e84a0db766059bd3931aeefd5c5691476b95b",
-        },
     },
     .paths = .{
         "build.zig",

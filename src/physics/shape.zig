@@ -2,8 +2,8 @@ const std = @import("std");
 const zlm = @import("zlm");
 
 pub const AABB = struct {
-    tl: zlm.Vec2,
-    br: zlm.Vec2,
+    tl: zlm.Vec2 = zlm.vec2(0, 0),
+    br: zlm.Vec2 = zlm.vec2(0, 0),
 
     pub fn fromRadius(radius: f32) AABB {
         return AABB{
@@ -12,9 +12,43 @@ pub const AABB = struct {
         };
     }
 
+    pub fn ensureContains(self: *AABB, aabb: AABB) void {
+        self.tl.x = @min(self.tl.x, aabb.tl.x);
+        self.tl.y = @min(self.tl.y, aabb.tl.y);
+        self.br.x = @max(self.br.x, aabb.br.x);
+        self.br.y = @max(self.br.y, aabb.br.y);
+    }
+
     pub fn intersects(self: AABB, other: AABB) bool {
         return self.br.x > other.tl.x and other.br.x > self.tl.x and
             self.br.y > other.tl.y and other.br.y > self.tl.y;
+    }
+
+    pub fn width(self: AABB) f32 {
+        return self.br.x - self.tl.x;
+    }
+
+    pub fn height(self: AABB) f32 {
+        return self.br.y - self.tl.y;
+    }
+
+    pub fn area(self: AABB) f32 {
+        return self.width() * self.height();
+    }
+
+    pub fn areaDifferenceIfEnsureContains(self: AABB, aabb: AABB) f32 {
+        var selfCopy = self;
+        selfCopy.ensureContains(aabb);
+
+        return selfCopy.area() - self.area();
+    }
+
+    pub fn center(self: AABB) zlm.Vec2 {
+        return self.tl.add(zlm.vec2(self.width() / 2, self.height() / 2));
+    }
+
+    pub fn distanceSq(self: AABB, other: AABB) f32 {
+        return self.center().distance2(other.center());
     }
 };
 

@@ -44,7 +44,7 @@ pub const PhysicsSystem = struct {
             .view = reg.basicView(RigidBody),
             .reg = reg,
             .bodyContainer = try RigidBodyContainer.init(allocator),
-            .collisionContainer = try CollisionContainer.init(allocator),
+            .collisionContainer = CollisionContainer.init(allocator),
         };
     }
 
@@ -83,8 +83,11 @@ pub const PhysicsSystem = struct {
 
         self.removeFarBodies();
 
-        for (self.view.raw()) |*body| {
+        for (self.view.data()) |entity| {
+            const entityId = self.reg.entityId(entity);
+            const body = self.view.get(entity);
             body.updateTransform();
+            self.collisionContainer.updateBody(entityId, body);
         }
     }
 
@@ -145,6 +148,19 @@ pub const PhysicsSystem = struct {
         zone.Text("Bodies:");
         zone.Value(bodies.len);
 
+        //self.updateCollisionsBruteForce();
+        self.updateCollisionsWithContainer();
+    }
+
+    fn updateCollisionsWithContainer(self: *PhysicsSystem) void {
+        for (self.view.raw()) |*body| {
+            self.collisionContainer.checkCollision(body, self, emitPendingCollision);
+        }
+    }
+
+    fn updateCollisionsBruteForce(self: *PhysicsSystem) void {
+        const bodies = self.view.raw();
+
         if (bodies.len == 0) return;
 
         for (0.., bodies[0 .. bodies.len - 1]) |iA, *bodyA| {
@@ -197,7 +213,12 @@ pub const PhysicsSystem = struct {
         numberOfCollisionEvents = 0;
     }
 
-    pub fn addRigidBody(self: *PhysicsSystem, entity: ecs.Entity, pos: zlm.Vec2, isStatic: bool) RigidBodyDynamicParams {
+    pub fn addRigidBody(
+        self: *PhysicsSystem,
+        entity: ecs.Entity,
+        pos: zlm.Vec2,
+        static: RigidBodyStaticParams,
+    ) *RigidBody {
         const entityId = self.reg.entityId(entity);
         var isPointersValidated: bool = false;
 
@@ -209,7 +230,7 @@ pub const PhysicsSystem = struct {
             0,
             0,
             0,
-            isStatic,
+            static.isStatic,
             &isPointersValidated,
         );
 
@@ -217,7 +238,14 @@ pub const PhysicsSystem = struct {
             self.updateRigidBodiesInRegistry();
         }
 
-        return self.bodyContainer.getRigidBody(entityId);
+        const dynamic = self.bodyContainer.getRigidBody(entityId);
+
+        self.reg.add(entity, RigidBody.init(static, dynamic));
+        const body = self.view.get(entity);
+
+        self.collisionContainer.insertBody(entityId, body);
+
+        return body;
     }
 
     fn updateRigidBodiesInRegistry(self: *PhysicsSystem) void {
