@@ -12,6 +12,7 @@ const SAT = @import("collision/sat.zig");
 const AABB = @import("collision/aabb.zig");
 
 pub fn checkCollision(bodyA: *RigidBody, bodyB: *RigidBody) CollisionResult {
+    // TODO: Consider vtable instead of doing this check every time
     if (bodyA.*.s.shape == .rectangle and bodyB.*.s.shape == .rectangle and bodyA.*.d.r.* == 0 and bodyB.*.d.r.* == 0) {
         return AABB.checkCollisionBodies(bodyA, bodyB);
     } else {

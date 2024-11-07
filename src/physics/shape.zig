@@ -1,14 +1,22 @@
 const std = @import("std");
+const ztracy = @import("ztracy");
 const zlm = @import("zlm");
 
 pub const AABB = struct {
     tl: zlm.Vec2 = zlm.vec2(0, 0),
     br: zlm.Vec2 = zlm.vec2(0, 0),
+    isMinimal: bool,
 
-    pub fn fromRadius(radius: f32) AABB {
+    pub const Intersection = struct {
+        depth: f32,
+        axis: zlm.Vec2,
+    };
+
+    pub fn fromRadius(radius: f32, isMinimal: bool) AABB {
         return AABB{
             .tl = .{ .x = -radius, .y = -radius },
             .br = .{ .x = radius, .y = radius },
+            .isMinimal = isMinimal,
         };
     }
 
@@ -27,8 +35,41 @@ pub const AABB = struct {
     }
 
     pub fn intersects(self: AABB, other: AABB) bool {
+        const zone = ztracy.ZoneNC(@src(), "AABB: intersects", 0xff_ff_ff_00);
+        defer zone.End();
         return self.br.x > other.tl.x and other.br.x > self.tl.x and
             self.br.y > other.tl.y and other.br.y > self.tl.y;
+    }
+
+    pub fn intersection(self: AABB, other: AABB) ?Intersection {
+        const zone = ztracy.ZoneNC(@src(), "AABB: intersection", 0xff_ff_ff_00);
+        defer zone.End();
+        const maxL = @max(self.tl.x, other.tl.x);
+        const minR = @min(self.br.x, other.br.x);
+        const maxT = @max(self.tl.y, other.tl.y);
+        const minB = @min(self.br.y, other.br.y);
+
+        const depthX = minR - maxL;
+
+        if (depthX <= 0) return null;
+
+        const depthY = minB - maxT;
+
+        const depth = @min(depthX, depthY);
+
+        if (depth > 0) {
+            var axis: zlm.Vec2 = undefined;
+
+            if (depthX < depthY) {
+                axis = zlm.vec2(std.math.sign(other.center().distance2(self.center())), 0);
+            } else {
+                axis = zlm.vec2(0, std.math.sign(other.center().distance2(self.center())));
+            }
+
+            return Intersection{ .depth = depth, .axis = axis };
+        }
+
+        return null;
     }
 
     pub fn width(self: AABB) f32 {
@@ -50,12 +91,20 @@ pub const AABB = struct {
         return selfCopy.area() - self.area();
     }
 
+    pub fn margin(self: AABB) f32 {
+        return (self.width() + self.height()) * 2;
+    }
+
     pub fn center(self: AABB) zlm.Vec2 {
         return self.tl.add(zlm.vec2(self.width() / 2, self.height() / 2));
     }
 
     pub fn distanceSq(self: AABB, other: AABB) f32 {
         return self.center().distance2(other.center());
+    }
+
+    pub fn add(self: AABB, v: zlm.Vec2) AABB {
+        return AABB{ .tl = self.tl.add(v), .br = self.br.add(v), .isMinimal = self.isMinimal };
     }
 };
 
@@ -70,10 +119,10 @@ pub const Shape = union(enum) {
         };
     }
 
-    pub fn aabb(self: Shape) AABB {
+    pub fn aabb(self: Shape, rotation: f32) AABB {
         return switch (self) {
             .circle => |circle| circle.aabb(),
-            .rectangle => |rectangle| rectangle.aabb(),
+            .rectangle => |rectangle| rectangle.aabb(rotation),
         };
     }
 
@@ -120,7 +169,7 @@ pub const Circle = struct {
     }
 
     pub fn aabb(self: Circle) AABB {
-        return AABB.fromRadius(self.radius);
+        return AABB.fromRadius(self.radius, true);
     }
 
     pub fn radiusSq(self: Circle) f32 {
@@ -159,8 +208,11 @@ pub const Rectangle = struct {
     }
 
     /// Returns the *maximum* aabb bounding box, with potential rotation of the rectangle taken into account.
-    pub fn aabb(self: Rectangle) AABB {
-        return AABB.fromRadius(self.circleExtent());
+    pub fn aabb(self: Rectangle, rotation: f32) AABB {
+        if (rotation == 0) {
+            return AABB{ .tl = self.vertices[0], .br = self.vertices[2], .isMinimal = true };
+        }
+        return AABB.fromRadius(self.circleExtent(), false);
     }
 
     pub fn width(self: Rectangle) f32 {

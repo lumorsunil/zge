@@ -15,6 +15,7 @@ const CollisionEvent = @import("physics.zig").CollisionEvent;
 const RigidBody = @import("physics/rigid-body-flat.zig").RigidBodyFlat;
 const RigidBodyStaticParams = @import("physics/rigid-body-static.zig").RigidBodyStaticParams;
 const Rectangle = @import("physics/shape.zig").Rectangle;
+const Circle = @import("physics/shape.zig").Circle;
 const Densities = @import("physics/rigid-body-static.zig").Densities;
 
 pub const DebugScene = struct {
@@ -45,36 +46,35 @@ pub const DebugScene = struct {
 
     pub fn randomPos(self: *DebugScene) zlm.Vec2 {
         return zlm.vec2(
-            self.rand.random().float(f32) * cfg.size.x / 8 - cfg.size.x / 4,
-            self.rand.random().float(f32) * cfg.size.y / 8 - cfg.size.y / 4,
+            self.rand.random().float(f32) * cfg.size.x - cfg.size.x / 2,
+            self.rand.random().float(f32) * cfg.size.y - cfg.size.y / 2,
         );
     }
 
     pub fn randomSize(self: *DebugScene) zlm.Vec2 {
         return zlm.vec2(
-            10 + 20 * self.rand.random().float(f32),
-            10 + 20 * self.rand.random().float(f32),
+            self.randomRadius() * 2,
+            self.randomRadius() * 2,
         );
+    }
+
+    pub fn randomRadius(self: *DebugScene) f32 {
+        return 5 + 10 * self.rand.random().float(f32);
     }
 
     pub fn addRandomCircle(self: *DebugScene) void {
         const e = self.reg.create();
 
-        const result = RigidBody.init(
-            .{ .circle = .{ .radius = 5 + 10 * self.rand.random().float(f32) } },
-            Densities.Water,
-            1,
+        const result = RigidBodyStaticParams.init(
+            .{ .circle = Circle.init(self.randomRadius()) },
+            Densities.Element.Osmium,
+            0.2,
             false,
         );
 
         switch (result) {
-            .success => |ibody| {
-                var body = ibody;
-                body.d.p = self.randomPos();
-                if (self.rand.random().boolean()) {
-                    body.s.isStatic = true;
-                }
-                self.reg.add(e, body);
+            .success => |static| {
+                _ = self.physicsSystem.addRigidBody(e, self.randomPos(), static);
             },
             .err => |err| std.log.err("{s}", .{err}),
         }
@@ -122,9 +122,35 @@ pub const DebugScene = struct {
         }
     }
 
-    pub fn update(self: *DebugScene, dt: f32) void {
+    var bodiesAdded: usize = 0;
+    var addt: f64 = 0;
+    var randomPositions: [300]zlm.Vec2 = randomPositions: {
+        var rand = std.Random.DefaultPrng.init(0);
+        var rps: [300]zlm.Vec2 = undefined;
+
+        @setEvalBranchQuota(300000);
+
+        for (0..rps.len) |i| {
+            rps[i] = .{
+                .x = rand.random().float(f32) * cfg.size.x - cfg.size.x / 2,
+                .y = rand.random().float(f32) * cfg.size.y - cfg.size.y / 2,
+            };
+        }
+
+        const Sorter = struct {
+            pub fn lessThanFn(_: void, lhs: zlm.Vec2, rhs: zlm.Vec2) bool {
+                return lhs.x < rhs.x;
+            }
+        };
+
+        std.mem.sort(zlm.Vec2, &rps, {}, Sorter.lessThanFn);
+
+        break :randomPositions rps;
+    };
+
+    pub fn update(self: *DebugScene, dt: f32, t: f64) void {
         var force = zlm.Vec2.zero;
-        const speed = 1;
+        const speed = 10;
 
         if (rl.isKeyDown(rl.KeyboardKey.key_a)) {
             force.x -= speed;
@@ -159,7 +185,17 @@ pub const DebugScene = struct {
             body.applyForce(force);
         }
 
-        self.physicsSystem.update(dt, 0.0005);
+        //if (dt < 0.017) {
+        if (bodiesAdded < 300 and t >= addt) {
+            //self.addRandomRectangle();
+            //self.addRandomCircle();
+            self.addRectangle(randomPositions[bodiesAdded], self.randomSize(), false);
+            bodiesAdded += 1;
+            addt += 0.2;
+        }
+
+        self.physicsSystem.update(dt);
+        //self.physicsSystem.updateDynamicSubSteps(dt, 0.0005);
 
         const collisions = self.physicsSystem.pollCollisions(*DebugScene, self, onCollision);
         _ = collisions;

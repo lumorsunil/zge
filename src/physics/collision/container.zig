@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const ztracy = @import("ztracy");
 const zlm = @import("zlm");
 const RTree = @import("r-tree.zig").RTree;
 const Entry = @import("r-tree.zig").Entry;
@@ -19,11 +20,7 @@ const RTreeEntryExtension = struct {
     }
 
     pub fn static_aabb(body: RigidBody) AABB {
-        var bodyAabb = body.aabb();
-        const p = body.d.clonePos();
-        bodyAabb.tl = p.add(bodyAabb.tl);
-        bodyAabb.br = p.add(bodyAabb.br);
-        return bodyAabb;
+        return body.aabb;
     }
 
     pub fn init(entity: ecs.Entity, value: *CollisionContainer) CCRTreeEntry {
@@ -59,29 +56,54 @@ pub const CollisionContainer = struct {
         self.tree.deinit();
     }
 
-    pub fn insertBody(self: *CollisionContainer, id: ecs.Entity) void {
-        self.tree.insertEntry(RTreeEntryExtension.init(id, self));
+    pub fn insertBody(self: *CollisionContainer, entity: ecs.Entity) void {
+        self.tree.insertEntry(RTreeEntryExtension.init(entity, self));
     }
 
-    pub fn removeEntry(self: *CollisionContainer, entry: RTreeEntry) void {
-        self.tree.removeEntry(entry);
+    pub fn removeBody(self: *CollisionContainer, entity: ecs.Entity) void {
+        self.tree.removeEntry(RTreeEntryExtension.init(entity, self));
     }
 
-    pub fn updateBody(self: *CollisionContainer, id: ecs.Entity) void {
-        self.tree.updateEntry(RTreeEntryExtension.init(id, self));
+    pub fn updateBody(self: *CollisionContainer, entity: ecs.Entity) void {
+        self.tree.updateEntry(RTreeEntryExtension.init(entity, self));
     }
 
-    /// Caller owns returned array
-    pub fn intersecting(self: CollisionContainer, body: RigidBody) []*RTreeEntry {
-        return self.tree.intersecting(RTreeEntryExtension.static_aabb(body));
+    pub fn sync(self: *CollisionContainer) void {
+        self.tree.sortLevels();
     }
 
-    pub fn checkCollision(self: CollisionContainer, body: *RigidBody, context: anytype, callback: fn (context: @TypeOf(context), collision: Collision) void) void {
-        const intersectingEntries = self.intersecting(body.*);
-        defer self.allocator.free(intersectingEntries);
+    /// Result is invalidated when this function is called again
+    pub fn intersecting(self: *CollisionContainer, body: RigidBody, entityId: ecs.Entity) []CCRTree.Intersection {
+        const zone = ztracy.ZoneN(@src(), "intersecting");
+        defer zone.End();
+        return self.tree.intersecting(RTreeEntryExtension.static_aabb(body), entityId);
+    }
 
-        for (intersectingEntries) |entry| {
-            const other = self.view.get(entry.key);
+    // TODO: Replace callback with returning a list or populating an event list in container for the physics system to consume instead
+    pub fn checkCollision(self: *CollisionContainer, body: *RigidBody, entity: ecs.Entity, context: anytype, callback: fn (context: @TypeOf(context), collision: Collision) void) void {
+        const zone = ztracy.ZoneNC(@src(), "CC: check collision", 0xff_ff_00_00);
+        defer zone.End();
+        const entityId = self.reg.entityId(entity);
+        const intersections = self.intersecting(body.*, entityId);
+
+        for (intersections) |intersection| {
+            const forBodyZone = ztracy.ZoneNC(@src(), "CC: check collision for body", 0xff_ff_00_00);
+            defer forBodyZone.End();
+            const other = self.view.get(intersection.entry.key);
+
+            if (body.aabb.isMinimal and other.aabb.isMinimal) {
+                callback(context, Collision{
+                    .bodyA = body,
+                    .bodyB = other,
+                    .depth = intersection.depth,
+                    .normal = intersection.axis,
+                    .contact1 = undefined,
+                    .contact2 = undefined,
+                    .contactCount = undefined,
+                });
+                continue;
+            }
+
             const result = body.checkCollision(other);
 
             switch (result) {

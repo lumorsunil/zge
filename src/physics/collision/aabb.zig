@@ -46,7 +46,7 @@ pub fn checkCollisionBodies(bodyA: *RigidBody, bodyB: *RigidBody) CollisionResul
     var depth: f32 = undefined;
     var axis: zlm.Vec2 = undefined;
 
-    if (!checkCollision(bodyA.aabb(), bodyB.aabb(), &depth, &axis)) {
+    if (!checkCollision(bodyA.aabb, bodyB.aabb, &depth, &axis)) {
         return .noCollision;
     }
 

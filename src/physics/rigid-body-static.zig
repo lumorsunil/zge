@@ -159,8 +159,8 @@ pub const RigidBodyStaticParams = struct {
         } };
     }
 
-    pub fn aabb(self: RigidBodyStaticParams) AABB {
-        return self.shape.aabb();
+    pub fn aabb(self: RigidBodyStaticParams, rotation: f32) AABB {
+        return self.shape.aabb(rotation);
     }
 
     pub fn radius(self: RigidBodyStaticParams) f32 {

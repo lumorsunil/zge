@@ -12,18 +12,24 @@ const CollisionResult = @import("collision/result.zig").CollisionResult;
 pub const RigidBodyFlat = struct {
     s: RigidBodyStaticParams,
     d: RigidBodyDynamicParams,
+    aabb: AABB,
 
     pub const Collision = @import("collision/result.zig").Collision;
 
     pub fn init(static: RigidBodyStaticParams, dynamic: RigidBodyDynamicParams) RigidBodyFlat {
-        return RigidBodyFlat{
+        var body = RigidBodyFlat{
             .s = static,
             .d = dynamic,
+            .aabb = undefined,
         };
+
+        body.updateTransform();
+
+        return body;
     }
 
     pub fn aabb(self: RigidBodyFlat) AABB {
-        return self.s.aabb();
+        return self.s.aabb(self.d.r.*).add(.{ .x = self.d.p.x.*, .y = self.d.p.y.* });
     }
 
     pub fn radius(self: *const RigidBodyFlat) f32 {
@@ -40,13 +46,12 @@ pub const RigidBodyFlat = struct {
 
     pub fn updateTransform(self: *RigidBodyFlat) void {
         self.s.updateTransform(self.d.clonePos(), self.d.r.*);
+        self.aabb = RigidBodyFlat.aabb(self.*);
     }
 
     pub fn checkCollision(self: *RigidBodyFlat, other: *RigidBodyFlat) CollisionResult {
         const zone = ztracy.ZoneNC(@src(), "check collision", 0x00_ff_ff_00);
         defer zone.End();
-
-        if (self.s.isStatic and other.s.isStatic) return .noCollision;
         return col.checkCollision(self, other);
     }
 

@@ -66,12 +66,13 @@ pub const DrawSystem = struct {
     }
 
     fn drawPage(self: *DrawSystem, page: *CollisionContainer.RTree.Page, level: usize, height: usize, camera: Camera) void {
-        const color = ccLevelColors[height - level];
+        std.debug.assert(level <= height);
+        const color = ccLevelColors[@min(height - level, ccLevelColors.len - 1)];
 
-        self.drawAabb(page.aabb, color, camera);
+        self.drawAabb(page.aabb, color, @as(f32, @floatFromInt(page.calculateHeight())) - 1, camera);
 
         for (page.children.items) |child| {
-            self.drawNode(child, level + 1, height, camera);
+            self.drawNode(child.*, level + 1, height, camera);
         }
     }
 
@@ -83,10 +84,10 @@ pub const DrawSystem = struct {
     }
 
     fn drawEntry(self: *DrawSystem, entry: CollisionContainer.RTreeEntry, camera: Camera) void {
-        self.drawAabb(CollisionContainer.entryAabb(entry), ccEntryColor, camera);
+        self.drawAabb(CollisionContainer.entryAabb(entry), ccEntryColor, 1, camera);
     }
 
-    fn drawAabb(self: *DrawSystem, aabb: AABB, color: rl.Color, camera: Camera) void {
+    fn drawAabb(self: *DrawSystem, aabb: AABB, color: rl.Color, thickness: f32, camera: Camera) void {
         _ = self;
         const p = screenPositionV(camera.vxy(aabb.tl.x, aabb.tl.y));
         rl.drawRectangleLinesEx(
@@ -96,7 +97,7 @@ pub const DrawSystem = struct {
                 aabb.width(),
                 aabb.height(),
             ),
-            1,
+            thickness,
             color,
         );
     }

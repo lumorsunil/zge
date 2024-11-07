@@ -47,7 +47,7 @@ pub fn main() !void {
             try stdout.print("bodies: {}, dt: {}, timeSteps: {d:.1}\n", .{ scene.reg.len(RigidBody), dt, scene.physicsSystem.numberOfTimeSteps(dt, 0.0005) });
         }
 
-        scene.update(dt);
+        scene.update(dt, t);
         scene.draw();
     }
 }

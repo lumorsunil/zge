@@ -16,6 +16,9 @@ const Collision = @import("physics/collision/result.zig").Collision;
 const CollisionContainer = @import("physics/collision/container.zig").CollisionContainer;
 const resolveCollision = @import("physics/collision.zig").resolveCollision;
 
+const sweep = @import("physics/collision/sweep.zig").sweep;
+const SweepLine = @import("physics/collision/sweep.zig").SweepLine;
+
 pub const CollisionEvent = struct {
     entityA: ecs.Entity,
     entityB: ecs.Entity,
@@ -23,6 +26,15 @@ pub const CollisionEvent = struct {
 };
 
 const MAX_COLLISION_EVENTS = 10000;
+const PHYSICS_SUB_STEPS = 8;
+
+const CollisionType = enum {
+    rTree,
+    sweep,
+    bruteForce,
+};
+
+const collisionType: CollisionType = .rTree;
 
 pub const PhysicsSystem = struct {
     pendingCollisions: [MAX_COLLISION_EVENTS]Collision = undefined,
@@ -35,6 +47,9 @@ pub const PhysicsSystem = struct {
     bodyContainer: RigidBodyContainer,
     collisionContainer: *CollisionContainer,
 
+    sweepLineBuffer: ArrayList(SweepLine),
+    overlappingBuffer: ArrayList(bool),
+
     var numberOfPendingCollisions: usize = 0;
     var numberOfCollisionEvents: usize = 0;
 
@@ -45,17 +60,23 @@ pub const PhysicsSystem = struct {
         const ccPtr = reg.get(CollisionContainer, cce);
 
         return PhysicsSystem{
-            .gravity = zlm.vec2(0, 9.8),
+            //.gravity = zlm.vec2(0, 9.8),
+            .gravity = zlm.vec2(0, 0),
             .view = reg.basicView(RigidBody),
             .reg = reg,
             .bodyContainer = try RigidBodyContainer.init(allocator),
             .collisionContainer = ccPtr,
+
+            .sweepLineBuffer = try ArrayList(SweepLine).initCapacity(allocator, 100),
+            .overlappingBuffer = try ArrayList(bool).initCapacity(allocator, 100),
         };
     }
 
     pub fn deinit(self: *const PhysicsSystem) void {
         self.bodyContainer.deinit();
         self.collisionContainer.deinit();
+        self.sweepLineBuffer.deinit();
+        self.overlappingBuffer.deinit();
     }
 
     pub fn numberOfTimeSteps(self: PhysicsSystem, dt: f32, maxTimeStep: f32) f32 {
@@ -63,7 +84,20 @@ pub const PhysicsSystem = struct {
         return dt / maxTimeStep;
     }
 
-    pub fn update(self: *PhysicsSystem, dt: f32, maxTimeStep: f32) void {
+    pub fn update(self: *PhysicsSystem, dt: f32) void {
+        const zone = ztracy.ZoneNC(@src(), "physics upate", 0xff_00_00_00);
+        defer zone.End();
+
+        const intervalTimeStep = dt / PHYSICS_SUB_STEPS;
+
+        for (0..PHYSICS_SUB_STEPS) |_| {
+            self.updatePositions(intervalTimeStep);
+            self.updateCollisions();
+            self.resolveCollisions();
+        }
+    }
+
+    pub fn updateDynamicSubSteps(self: *PhysicsSystem, dt: f32, maxTimeStep: f32) void {
         const zone = ztracy.ZoneNC(@src(), "physics upate", 0xff_00_00_00);
         defer zone.End();
 
@@ -86,14 +120,19 @@ pub const PhysicsSystem = struct {
 
         self.bodyContainer.updatePositions(self.gravity, dt);
 
-        self.removeFarBodies();
+        //self.removeFarBodies();
 
         for (self.view.data()) |entity| {
-            const entityId = self.reg.entityId(entity);
             const body = self.view.get(entity);
             body.updateTransform();
-            if (self.view.len() == 9) std.log.info("UPDATING {}", .{entityId});
-            self.collisionContainer.updateBody(entity);
+
+            if (collisionType == .rTree) {
+                self.collisionContainer.updateBody(entity);
+            }
+        }
+
+        if (collisionType == .rTree) {
+            self.collisionContainer.sync();
         }
     }
 
@@ -121,8 +160,7 @@ pub const PhysicsSystem = struct {
                 body.d.p.y.* < -cfg.sizeHalfH or
                 body.d.p.y.* > cfg.sizeHalfH)
             {
-                self.bodyContainer.removeRigidBody(self.reg.entityId(entity));
-                self.reg.destroy(entity);
+                self.removeRigidBody(entity);
             }
         }
     }
@@ -154,13 +192,54 @@ pub const PhysicsSystem = struct {
         zone.Text("Bodies:");
         zone.Value(bodies.len);
 
-        //self.updateCollisionsBruteForce();
-        self.updateCollisionsWithContainer();
+        switch (collisionType) {
+            .bruteForce => self.updateCollisionsBruteForce(),
+            .rTree => self.updateCollisionsWithContainer(),
+            .sweep => self.updateCollisionSweep(),
+        }
     }
 
     fn updateCollisionsWithContainer(self: *PhysicsSystem) void {
-        for (self.view.raw()) |*body| {
-            self.collisionContainer.checkCollision(body, self, emitPendingCollision);
+        for (self.view.data()) |entity| {
+            const zone = ztracy.ZoneN(@src(), "uc entity");
+            defer zone.End();
+            const body = self.view.get(entity);
+            if (body.s.isStatic) continue;
+            self.collisionContainer.checkCollision(body, entity, self, emitPendingCollision);
+        }
+    }
+
+    fn updateCollisionSweep(self: *PhysicsSystem) void {
+        const bodies = self.view.raw();
+        self.sweepLineBuffer.ensureTotalCapacityPrecise(bodies.len * 2) catch unreachable;
+        self.sweepLineBuffer.expandToCapacity();
+        self.overlappingBuffer.ensureTotalCapacityPrecise(bodies.len * 2) catch unreachable;
+        self.overlappingBuffer.expandToCapacity();
+
+        sweep(
+            RigidBody,
+            bodies,
+            self.sweepLineBuffer.items,
+            self.overlappingBuffer.items,
+            self,
+            onAxisOverlap,
+        );
+    }
+
+    fn onAxisOverlap(self: *PhysicsSystem, a: usize, bs: []bool, n: usize) void {
+        const bodyA = &self.view.raw()[a];
+        var left = n;
+
+        for (0.., bs) |i, b| {
+            if (!b or left <= 0) continue;
+            const bodyB = &self.view.raw()[i];
+
+            switch (bodyA.checkCollision(bodyB)) {
+                .noCollision => {},
+                .collision => |collision| self.emitPendingCollision(collision),
+            }
+
+            left -= 1;
         }
     }
 
@@ -170,6 +249,8 @@ pub const PhysicsSystem = struct {
         if (bodies.len == 0) return;
 
         for (0.., bodies[0 .. bodies.len - 1]) |iA, *bodyA| {
+            if (bodyA.s.isStatic) continue;
+
             for (iA + 1.., bodies[iA + 1 .. bodies.len]) |iB, *bodyB| {
                 _ = iB; // autofix
                 const result = bodyA.checkCollision(bodyB);
@@ -251,9 +332,19 @@ pub const PhysicsSystem = struct {
         self.reg.add(entity, RigidBody.init(static, dynamic));
         const body = self.view.get(entity);
 
-        self.collisionContainer.insertBody(entity);
+        if (collisionType == .rTree) {
+            self.collisionContainer.insertBody(entity);
+        }
 
         return body;
+    }
+
+    pub fn removeRigidBody(self: *PhysicsSystem, entity: ecs.Entity) void {
+        if (collisionType == .rTree) {
+            self.collisionContainer.removeBody(entity);
+        }
+        self.bodyContainer.removeRigidBody(self.reg.entityId(entity));
+        self.reg.destroy(entity);
     }
 
     fn updateRigidBodiesInRegistry(self: *PhysicsSystem) void {
