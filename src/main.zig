@@ -22,6 +22,7 @@ pub fn main() !void {
 
     var scene = try DebugScene.init(allocator, &reg);
     defer scene.deinit();
+    scene.bind();
 
     scene.addPlayer(scene.randomPos(), zlm.vec2(10, 10));
 
@@ -32,6 +33,7 @@ pub fn main() !void {
     );
 
     rl.initWindow(cfg.size.x, cfg.size.y, "Zig Game Engine Test");
+    rl.setWindowPosition(5, 5);
 
     var lastSample: f64 = 0;
 

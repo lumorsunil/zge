@@ -15,6 +15,7 @@ const RigidBodyContainer = @import("physics/rigid-body-container.zig").RigidBody
 const Collision = @import("physics/collision/result.zig").Collision;
 const CollisionContainer = @import("physics/collision/container.zig").CollisionContainer;
 const resolveCollision = @import("physics/collision.zig").resolveCollision;
+const AABB = @import("physics/shape.zig").AABB;
 
 const sweep = @import("physics/collision/sweep.zig").sweep;
 const SweepLine = @import("physics/collision/sweep.zig").SweepLine;
@@ -30,11 +31,12 @@ const PHYSICS_SUB_STEPS = 8;
 
 const CollisionType = enum {
     rTree,
+    quadTree,
     sweep,
     bruteForce,
 };
 
-const collisionType: CollisionType = .rTree;
+const collisionType: CollisionType = .quadTree;
 
 pub const PhysicsSystem = struct {
     pendingCollisions: [MAX_COLLISION_EVENTS]Collision = undefined,
@@ -196,10 +198,29 @@ pub const PhysicsSystem = struct {
             .bruteForce => self.updateCollisionsBruteForce(),
             .rTree => self.updateCollisionsWithContainer(),
             .sweep => self.updateCollisionSweep(),
+            .quadTree => self.updateCollisionsWithContainerQT(),
         }
     }
 
     fn updateCollisionsWithContainer(self: *PhysicsSystem) void {
+        for (self.view.data()) |entity| {
+            const zone = ztracy.ZoneN(@src(), "uc entity");
+            defer zone.End();
+            const body = self.view.get(entity);
+            if (body.s.isStatic) continue;
+            self.collisionContainer.checkCollision(body, entity, self, emitPendingCollision);
+        }
+    }
+
+    fn updateCollisionsWithContainerQT(self: *PhysicsSystem) void {
+        const boundary = AABB{
+            .tl = zlm.vec2(-cfg.sizeHalfW, -cfg.sizeHalfH),
+            .br = zlm.vec2(cfg.sizeHalfW, cfg.sizeHalfH),
+            .isMinimal = false,
+        };
+
+        self.collisionContainer.tree.populate(boundary, self.view.raw());
+
         for (self.view.data()) |entity| {
             const zone = ztracy.ZoneN(@src(), "uc entity");
             defer zone.End();
@@ -329,7 +350,7 @@ pub const PhysicsSystem = struct {
 
         const dynamic = self.bodyContainer.getRigidBody(entityId);
 
-        self.reg.add(entity, RigidBody.init(static, dynamic));
+        self.reg.add(entity, RigidBody.init(entity, static, dynamic));
         const body = self.view.get(entity);
 
         if (collisionType == .rTree) {

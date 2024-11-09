@@ -3,6 +3,21 @@ const ztracy = @import("ztracy");
 
 const AABB = @import("../shape.zig").AABB;
 
+// TODO: Add a feature that divides the plane into rectangles with infinite width and a fixed height,
+// the height should not be less than the greatest height of any one body, so that each body can only be
+// overlapping or contained in at most two of these rectangles that divide the plane.
+//
+// Each body will be assigned to up to two of these rectangles, depending on their Y-axis boundary.
+//
+// When sweeping, instead of having just one active list, there will be an active list for each of the
+// division rectangles. When a left edge is encountered, place it in the corresponding active list for
+// the division rectangles that contain or overlap the body.
+// When encountering another left edge, only do collision checks for the active list that corresponds
+// to the same division rectangles.
+//
+// This way, the sweep will only check collisions for rectangles that share division rectangles, thus
+// reducing expensive collision checks.
+
 const SMALL_LINE_BUFFER_LEN = 100;
 /// Threshold for when to start sweeping on Y-axis when this many overlaps occur on the X-axis.
 const SWEEP_Y_THRESHOLD = 3;

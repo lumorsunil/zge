@@ -1,5 +1,6 @@
 const zlm = @import("zlm");
 const ztracy = @import("ztracy");
+const ecs = @import("ecs");
 
 const Shape = @import("shape.zig").Shape;
 const AABB = @import("shape.zig").AABB;
@@ -13,11 +14,13 @@ pub const RigidBodyFlat = struct {
     s: RigidBodyStaticParams,
     d: RigidBodyDynamicParams,
     aabb: AABB,
+    key: ecs.Entity,
 
     pub const Collision = @import("collision/result.zig").Collision;
 
-    pub fn init(static: RigidBodyStaticParams, dynamic: RigidBodyDynamicParams) RigidBodyFlat {
+    pub fn init(key: ecs.Entity, static: RigidBodyStaticParams, dynamic: RigidBodyDynamicParams) RigidBodyFlat {
         var body = RigidBodyFlat{
+            .key = key,
             .s = static,
             .d = dynamic,
             .aabb = undefined,

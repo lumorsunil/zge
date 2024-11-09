@@ -11,21 +11,25 @@ const AABB = @import("physics/shape.zig").AABB;
 const Circle = @import("physics/shape.zig").Circle;
 const Rectangle = @import("physics/shape.zig").Rectangle;
 const CollisionContainer = @import("physics/collision/container.zig").CollisionContainer;
+const ccAlgorithm = @import("physics/collision/container.zig").ccAlgorithm;
 const Camera = @import("camera.zig").Camera;
+const Screen = @import("screen.zig").Screen;
 
-const cfg = @import("config.zig");
-
-const screenPosition = @import("screen.zig").screenPosition;
-const screenPositionV = @import("screen.zig").screenPositionV;
+const z2r = @import("vector.zig").z2r;
+const z2rect = @import("vector.zig").z2rect;
 
 pub const DrawSystem = struct {
+    screen: *const Screen,
+    reg: *ecs.Registry,
     view: ecs.BasicView(RigidBody),
     ccView: ecs.BasicView(CollisionContainer),
     drawOrderList: ArrayList(ecs.Entity),
     allocator: Allocator,
 
-    pub fn init(allocator: Allocator, reg: *ecs.Registry) !DrawSystem {
+    pub fn init(allocator: Allocator, reg: *ecs.Registry, screen: *const Screen) !DrawSystem {
         return DrawSystem{
+            .screen = screen,
+            .reg = reg,
             .view = reg.basicView(RigidBody),
             .ccView = reg.basicView(CollisionContainer),
             .drawOrderList = try ArrayList(ecs.Entity).initCapacity(allocator, 100),
@@ -33,15 +37,24 @@ pub const DrawSystem = struct {
         };
     }
 
-    pub fn deinit(self: DrawSystem) void {
+    pub fn deinit(self: *DrawSystem) void {
+        self.unbind();
         self.drawOrderList.deinit();
+    }
+
+    pub fn bind(self: *DrawSystem) void {
+        self.reg.onConstruct(RigidBody).connectBound(self, DrawSystem.ensureDrawOrderCapacity);
+    }
+
+    fn unbind(self: *DrawSystem) void {
+        self.reg.onConstruct(RigidBody).disconnectBound(self);
     }
 
     pub fn draw(self: *DrawSystem, camera: Camera) void {
         for (self.drawOrder()) |entity| {
             const body = self.view.getConst(entity);
 
-            DrawSystem.drawShape(body, camera);
+            self.drawShape(body, camera);
         }
 
         self.drawCollisionContainer(camera);
@@ -62,7 +75,24 @@ pub const DrawSystem = struct {
     fn drawCollisionContainer(self: *DrawSystem, camera: Camera) void {
         const cc = self.ccView.raw()[0];
 
-        self.drawPage(cc.tree.root, 1, cc.tree.height, camera);
+        if (ccAlgorithm == .rTree) {
+            self.drawPage(cc.tree.root, 1, cc.tree.height, camera);
+        } else {
+            self.drawPageQT(cc.tree.getRoot(), 0, camera);
+        }
+    }
+
+    fn drawPageQT(self: *DrawSystem, page: *CollisionContainer.QT.Node, level: usize, camera: Camera) void {
+        const color = ccLevelColors[@min(level, ccLevelColors.len - 1)];
+
+        if (page.page.quadrants) |quadrants| {
+            self.drawPageQT(quadrants.tl, level + 1, camera);
+            self.drawPageQT(quadrants.tr, level + 1, camera);
+            self.drawPageQT(quadrants.bl, level + 1, camera);
+            self.drawPageQT(quadrants.br, level + 1, camera);
+        }
+
+        self.drawAabb(page.page.aabb, color, 2, camera);
     }
 
     fn drawPage(self: *DrawSystem, page: *CollisionContainer.RTree.Page, level: usize, height: usize, camera: Camera) void {
@@ -88,8 +118,7 @@ pub const DrawSystem = struct {
     }
 
     fn drawAabb(self: *DrawSystem, aabb: AABB, color: rl.Color, thickness: f32, camera: Camera) void {
-        _ = self;
-        const p = screenPositionV(camera.vxy(aabb.tl.x, aabb.tl.y));
+        const p = self.screen.screenPositionV(camera.transformV(aabb.tl));
         rl.drawRectangleLinesEx(
             rl.Rectangle.init(
                 p.x,
@@ -109,54 +138,60 @@ pub const DrawSystem = struct {
         return bodyA.d.p.y.* < bodyB.d.p.y.*;
     }
 
-    fn drawOrder(self: *DrawSystem) []const ecs.Entity {
+    fn ensureDrawOrderCapacity(self: *DrawSystem, reg: *ecs.Registry, entity: ecs.Entity) void {
+        _ = entity;
+        _ = reg;
+
         self.drawOrderList.clearRetainingCapacity();
         self.drawOrderList.ensureTotalCapacity(self.view.len()) catch unreachable;
         self.drawOrderList.expandToCapacity();
+    }
 
+    fn drawOrder(self: *DrawSystem) []const ecs.Entity {
         util.sortTo(ecs.Entity, self.view.data(), self.drawOrderList.items[0..self.view.len()], self, minYComparer);
 
         return self.drawOrderList.items[0..self.view.len()];
     }
 
-    pub fn drawTexture(texture: *const rl.Texture2D, position: rl.Vector2, rotation: f32, scale: f32, camera: Camera) void {
+    pub fn drawTexture(self: DrawSystem, texture: *const rl.Texture2D, position: zlm.Vec2, rotation: f32, scale: f32, camera: Camera) void {
         const s = scale * camera.s;
         const r = rotation + camera.angle();
         const w = @as(f32, @floatFromInt(texture.width));
         const h = @as(f32, @floatFromInt(texture.height));
-        const p = rl.Vector2.init(position.x - (w / 2) * scale, position.y - (h / 2) * scale);
+        const textureSize = zlm.vec2(w, h);
+        const p = position.sub(textureSize.scale(0.5 * scale));
 
-        const screenP = camera.v(screenPosition(p.x * camera.s, p.y * camera.s));
-        const screenS = rl.Vector2.init(w * s, h * s);
+        const screenP = camera.transformV(self.screen.screenPosition(p.scale(camera.s)));
+        const screenS = textureSize.scale(s);
 
-        const source = rl.Rectangle.init(0, 0, w, h);
-        const dest = rl.Rectangle.init(screenP.x, screenP.y, screenS.x, screenS.y);
-        const origin = rl.Vector2.init(-dest.width / 2, -dest.height / 2);
+        const source = z2rect(zlm.Vec2.zero, textureSize);
+        const dest = z2rect(screenP, screenS);
+        const origin = dest.scale(-0.5);
 
-        rl.drawTexturePro(texture.*, source, dest, origin, r, rl.Color.white);
+        rl.drawTexturePro(texture.*, source, dest, z2r(origin), r, rl.Color.white);
     }
 
-    pub fn drawShape(rb: RigidBody, camera: Camera) void {
+    pub fn drawShape(self: DrawSystem, rb: RigidBody, camera: Camera) void {
         switch (rb.s.shape) {
-            .circle => |circle| drawCircle(circle, rb, camera),
-            .rectangle => |rectangle| drawRectangle(rectangle, rb, camera),
+            .circle => |circle| self.drawCircle(circle, rb, camera),
+            .rectangle => |rectangle| self.drawRectangle(rectangle, rb, camera),
         }
     }
 
-    pub fn drawCircle(circle: Circle, rb: RigidBody, camera: Camera) void {
+    pub fn drawCircle(self: DrawSystem, circle: Circle, rb: RigidBody, camera: Camera) void {
         const s = camera.s;
 
-        const screenP = camera.v(screenPosition(rb.d.p.x.*, rb.d.p.y.*));
+        const screenP = camera.transformV(self.screen.screenPosition(rb.d.p.x.*, rb.d.p.y.*));
 
-        rl.drawCircleLinesV(screenP, circle.radius * s, rl.Color.white);
+        rl.drawCircleLinesV(z2r(screenP), circle.radius * s, rl.Color.white);
     }
 
-    pub fn drawRectangle(rect: Rectangle, rb: RigidBody, camera: Camera) void {
+    pub fn drawRectangle(self: DrawSystem, rect: Rectangle, rb: RigidBody, camera: Camera) void {
         const s = camera.s;
         const halfRect = rect.size.scale(1 / 2);
         const p = zlm.vec2(rb.d.p.x.*, rb.d.p.y.*).sub(halfRect);
 
-        const screenP = camera.v(screenPosition(p.x, p.y));
+        const screenP = camera.transformV(self.screen.screenPosition(p.x, p.y));
 
         var transformedVertices: [5]rl.Vector2 = undefined;
 
@@ -169,11 +204,11 @@ pub const DrawSystem = struct {
         rl.drawLineStrip(&transformedVertices, rl.Color.white);
     }
 
-    fn drawDebugBorder(camera: Camera) void {
+    fn drawDebugBorder(self: DrawSystem, camera: Camera) void {
         const lw = 4;
         const lo = lw / 2;
-        const tl = screenPositionV(camera.vxy(-lo, -lo));
-        const br = screenPositionV(camera.vxy(cfg.size.w + lo, cfg.size.h + lo));
+        const tl = self.screen.screenPositionV(camera.transformV(-lo, -lo));
+        const br = self.screen.screenPositionV(camera.transformV(self.screen.size.w + lo, self.screen.size.h + lo));
 
         const bl = rl.Vector2.init(tl.x, br.y);
         const tr = rl.Vector2.init(br.x, tl.y);

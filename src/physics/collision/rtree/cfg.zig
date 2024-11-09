@@ -1,0 +1,5 @@
+pub const MAX_ENTRIES_IN_NODE = 5;
+pub const MIN_ENTRIES_IN_NODE = 2;
+pub const INTERSECTING_INITIAL_CAPACITY = MAX_ENTRIES_IN_NODE * 10;
+pub const MAXIMUM_AREA_THRESHOLD_FACTOR = 1.5;
+pub const STAR_P: usize = @max(1, @trunc(MAX_ENTRIES_IN_NODE * 0.3));

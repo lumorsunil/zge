@@ -12,6 +12,13 @@ pub const AABB = struct {
         axis: zlm.Vec2,
     };
 
+    pub fn format(value: AABB, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = options;
+        _ = fmt;
+
+        try writer.print("{{{};{}}}", .{ value.tl, value.br });
+    }
+
     pub fn fromRadius(radius: f32, isMinimal: bool) AABB {
         return AABB{
             .tl = .{ .x = -radius, .y = -radius },
@@ -41,6 +48,18 @@ pub const AABB = struct {
             self.br.y > other.tl.y and other.br.y > self.tl.y;
     }
 
+    pub fn lessThan(self: zlm.Vec2, other: zlm.Vec2) bool {
+        return self.x < other.x and self.y < other.y;
+    }
+
+    pub fn greaterThan(self: zlm.Vec2, other: zlm.Vec2) bool {
+        return self.x > other.x and self.y > other.y;
+    }
+
+    pub fn contains(self: AABB, other: AABB) bool {
+        return lessThan(self.tl, other.tl) and greaterThan(self.br, other.br);
+    }
+
     pub fn intersection(self: AABB, other: AABB) ?Intersection {
         const zone = ztracy.ZoneNC(@src(), "AABB: intersection", 0xff_ff_ff_00);
         defer zone.End();
@@ -61,9 +80,11 @@ pub const AABB = struct {
             var axis: zlm.Vec2 = undefined;
 
             if (depthX < depthY) {
-                axis = zlm.vec2(std.math.sign(other.center().distance2(self.center())), 0);
+                const sdx = std.math.sign(other.center().x - self.center().x);
+                axis = zlm.vec2(sdx, 0);
             } else {
-                axis = zlm.vec2(0, std.math.sign(other.center().distance2(self.center())));
+                const sdy = std.math.sign(other.center().y - self.center().y);
+                axis = zlm.vec2(0, sdy);
             }
 
             return Intersection{ .depth = depth, .axis = axis };
@@ -78,6 +99,10 @@ pub const AABB = struct {
 
     pub fn height(self: AABB) f32 {
         return self.br.y - self.tl.y;
+    }
+
+    pub fn size(self: AABB) zlm.Vec2 {
+        return zlm.vec2(self.width(), self.height());
     }
 
     pub fn area(self: AABB) f32 {

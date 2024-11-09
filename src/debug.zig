@@ -6,6 +6,7 @@ const ecs = @import("ecs");
 
 const cfg = @import("config.zig");
 
+const Screen = @import("screen.zig").Screen;
 const PhysicsSystem = @import("physics.zig").PhysicsSystem;
 const DrawSystem = @import("draw.zig").DrawSystem;
 const Camera = @import("camera.zig").Camera;
@@ -18,11 +19,14 @@ const Rectangle = @import("physics/shape.zig").Rectangle;
 const Circle = @import("physics/shape.zig").Circle;
 const Densities = @import("physics/rigid-body-static.zig").Densities;
 
+var screen = Screen.init(cfg.size.x, cfg.size.y);
+
 pub const DebugScene = struct {
     reg: *ecs.Registry,
     rand: std.Random.DefaultPrng,
     player: ecs.Entity,
 
+    screen: *const Screen,
     camera: Camera,
     physicsSystem: PhysicsSystem,
     drawSystem: DrawSystem,
@@ -33,13 +37,18 @@ pub const DebugScene = struct {
             .rand = std.Random.DefaultPrng.init(0),
             .player = 0,
 
+            .screen = &screen,
             .camera = Camera.init(),
             .physicsSystem = try PhysicsSystem.init(allocator, reg),
-            .drawSystem = try DrawSystem.init(allocator, reg),
+            .drawSystem = try DrawSystem.init(allocator, reg, &screen),
         };
     }
 
-    pub fn deinit(self: DebugScene) void {
+    pub fn bind(self: *DebugScene) void {
+        self.drawSystem.bind();
+    }
+
+    pub fn deinit(self: *DebugScene) void {
         self.physicsSystem.deinit();
         self.drawSystem.deinit();
     }
@@ -122,11 +131,12 @@ pub const DebugScene = struct {
         }
     }
 
+    const numberOfBodiesToAdd = 1000;
     var bodiesAdded: usize = 0;
     var addt: f64 = 0;
-    var randomPositions: [300]zlm.Vec2 = randomPositions: {
+    var randomPositions: [numberOfBodiesToAdd]zlm.Vec2 = randomPositions: {
         var rand = std.Random.DefaultPrng.init(0);
-        var rps: [300]zlm.Vec2 = undefined;
+        var rps: [numberOfBodiesToAdd]zlm.Vec2 = undefined;
 
         @setEvalBranchQuota(300000);
 
@@ -149,6 +159,7 @@ pub const DebugScene = struct {
     };
 
     pub fn update(self: *DebugScene, dt: f32, t: f64) void {
+        _ = t; // autofix
         var force = zlm.Vec2.zero;
         const speed = 10;
 
@@ -185,20 +196,21 @@ pub const DebugScene = struct {
             body.applyForce(force);
         }
 
-        //if (dt < 0.017) {
-        if (bodiesAdded < 300 and t >= addt) {
-            //self.addRandomRectangle();
-            //self.addRandomCircle();
-            self.addRectangle(randomPositions[bodiesAdded], self.randomSize(), false);
-            bodiesAdded += 1;
-            addt += 0.2;
-        }
+        self.addBodiesUntilLag(dt);
 
         self.physicsSystem.update(dt);
         //self.physicsSystem.updateDynamicSubSteps(dt, 0.0005);
 
         const collisions = self.physicsSystem.pollCollisions(*DebugScene, self, onCollision);
         _ = collisions;
+    }
+
+    fn addBodiesUntilLag(self: *DebugScene, dt: f32) void {
+        if (bodiesAdded < randomPositions.len and dt < 0.017) {
+            self.addRectangle(randomPositions[bodiesAdded], self.randomSize(), false);
+            bodiesAdded += 1;
+            addt += 0.05;
+        }
     }
 
     pub fn onCollision(self: *DebugScene, collisionEvent: CollisionEvent) void {

@@ -3,11 +3,20 @@ const Allocator = std.mem.Allocator;
 const ztracy = @import("ztracy");
 const zlm = @import("zlm");
 const RTree = @import("r-tree.zig").RTree;
+const QuadTree = @import("quad-tree.zig").QuadTree;
 const Entry = @import("r-tree.zig").Entry;
 const ecs = @import("ecs");
 const RigidBody = @import("../rigid-body-flat.zig").RigidBodyFlat;
 const AABB = @import("../shape.zig").AABB;
 const Collision = @import("result.zig").Collision;
+const Intersection = @import("intersection.zig").Intersection;
+
+const CollisionContainerAlgorithm = enum {
+    rTree,
+    quadTree,
+};
+
+pub const ccAlgorithm: CollisionContainerAlgorithm = .quadTree;
 
 const RTreeEntryExtension = struct {
     pub fn aabb(self: CCRTreeEntry) AABB {
@@ -32,20 +41,45 @@ const RTreeEntryExtension = struct {
 };
 
 const CCRTreeEntry = Entry(ecs.Entity, *CollisionContainer, RTreeEntryExtension);
-const CCRTree = RTree(CCRTreeEntry);
+const CCRTree = RTree(CCRTreeEntry, RTreeEntryExtension.aabb, RTreeEntryExtension.id);
+
+const QuadTreeGetAabb = struct {
+    pub fn getAabb(entry: *QuadTreeEntry) AABB {
+        return entry.*.aabb;
+    }
+};
+
+const QuadTreeEntry = RigidBody;
 
 pub const CollisionContainer = struct {
-    tree: CCRTree,
+    tree: treeType: {
+        if (ccAlgorithm == .rTree) break :treeType CCRTree else break :treeType QT;
+    },
     allocator: Allocator,
     view: ecs.BasicView(RigidBody),
     reg: *ecs.Registry,
 
     pub const RTreeEntry = CCRTreeEntry;
     pub const RTree = CCRTree;
+    pub const QT = QuadTree(QuadTreeEntry, QuadTreeGetAabb.getAabb);
+
+    const EntryType = entryType: {
+        if (ccAlgorithm == .rTree) {
+            break :entryType CCRTreeEntry;
+        } else {
+            break :entryType QuadTreeEntry;
+        }
+    };
 
     pub fn init(allocator: Allocator, reg: *ecs.Registry) CollisionContainer {
         return CollisionContainer{
-            .tree = CCRTree.init(allocator),
+            .tree = treeValue: {
+                if (ccAlgorithm == .rTree) {
+                    break :treeValue CCRTree.init(allocator);
+                } else {
+                    break :treeValue QT.init(allocator);
+                }
+            },
             .allocator = allocator,
             .view = reg.basicView(RigidBody),
             .reg = reg,
@@ -57,26 +91,35 @@ pub const CollisionContainer = struct {
     }
 
     pub fn insertBody(self: *CollisionContainer, entity: ecs.Entity) void {
+        if (ccAlgorithm != .rTree) return;
         self.tree.insertEntry(RTreeEntryExtension.init(entity, self));
     }
 
     pub fn removeBody(self: *CollisionContainer, entity: ecs.Entity) void {
+        if (ccAlgorithm != .rTree) return;
         self.tree.removeEntry(RTreeEntryExtension.init(entity, self));
     }
 
     pub fn updateBody(self: *CollisionContainer, entity: ecs.Entity) void {
+        if (ccAlgorithm != .rTree) return;
         self.tree.updateEntry(RTreeEntryExtension.init(entity, self));
     }
 
     pub fn sync(self: *CollisionContainer) void {
-        self.tree.sortLevels();
+        if (ccAlgorithm != .rTree) return;
+        //self.tree.sortLevels();
+        self.tree.optimizeOverlapPhase();
     }
 
     /// Result is invalidated when this function is called again
-    pub fn intersecting(self: *CollisionContainer, body: RigidBody, entityId: ecs.Entity) []CCRTree.Intersection {
+    pub fn intersecting(self: *CollisionContainer, body: RigidBody, entityId: ecs.Entity) []Intersection(*EntryType) {
         const zone = ztracy.ZoneN(@src(), "intersecting");
         defer zone.End();
-        return self.tree.intersecting(RTreeEntryExtension.static_aabb(body), entityId);
+        if (ccAlgorithm == .rTree) {
+            return self.tree.intersecting(RTreeEntryExtension.static_aabb(body), entityId);
+        } else {
+            return self.tree.intersecting(body.aabb);
+        }
     }
 
     // TODO: Replace callback with returning a list or populating an event list in container for the physics system to consume instead
