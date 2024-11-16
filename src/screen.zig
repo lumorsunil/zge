@@ -12,9 +12,28 @@ pub const Screen = struct {
         return screen;
     }
 
+    pub fn asInt(self: Screen, comptime T: type) zlm.SpecializeOn(T).Vec2 {
+        return zlm.SpecializeOn(T).vec2(
+            @as(T, @intFromFloat(self.size.x)),
+            @as(T, @intFromFloat(self.size.y)),
+        );
+    }
+
     pub fn setSize(self: *Screen, size: zlm.Vec2) void {
         self.size = size;
-        self.sizeHalf = size.scale(0.5);
+        self.sync();
+    }
+
+    pub fn setSizeFromInt(self: *Screen, comptime T: type, size: zlm.SpecializeOn(T).Vec2) void {
+        self.size = zlm.vec2(
+            @as(f32, @floatFromInt(size.x)),
+            @as(f32, @floatFromInt(size.y)),
+        );
+        self.sync();
+    }
+
+    fn sync(self: *Screen) void {
+        self.sizeHalf = self.size.scale(0.5);
     }
 
     pub fn screenPosition(self: Screen, x: f32, y: f32) zlm.Vec2 {

@@ -31,7 +31,7 @@ pub const DebugScene = struct {
     physicsSystem: PhysicsSystem,
     drawSystem: DrawSystem,
 
-    pub fn init(allocator: Allocator, reg: *ecs.Registry) !DebugScene {
+    pub fn init(allocator: Allocator, reg: *ecs.Registry) DebugScene {
         return DebugScene{
             .reg = reg,
             .rand = std.Random.DefaultPrng.init(0),
@@ -39,8 +39,8 @@ pub const DebugScene = struct {
 
             .screen = &screen,
             .camera = Camera.init(),
-            .physicsSystem = try PhysicsSystem.init(allocator, reg),
-            .drawSystem = try DrawSystem.init(allocator, reg, &screen),
+            .physicsSystem = PhysicsSystem.init(allocator, reg),
+            .drawSystem = DrawSystem.init(allocator, reg, &screen),
         };
     }
 
@@ -60,6 +60,7 @@ pub const DebugScene = struct {
         );
     }
 
+    const maxSize = zlm.vec2(maxRadius * 2, maxRadius * 2);
     pub fn randomSize(self: *DebugScene) zlm.Vec2 {
         return zlm.vec2(
             self.randomRadius() * 2,
@@ -67,8 +68,9 @@ pub const DebugScene = struct {
         );
     }
 
+    const maxRadius = 1 + 5;
     pub fn randomRadius(self: *DebugScene) f32 {
-        return 5 + 10 * self.rand.random().float(f32);
+        return 1 + 5 * self.rand.random().float(f32);
     }
 
     pub fn addRandomCircle(self: *DebugScene) void {
@@ -99,7 +101,7 @@ pub const DebugScene = struct {
         self.player = e;
 
         const result = RigidBodyStaticParams.init(
-            .{ .rectangle = Rectangle.init(size) },
+            .{ .rectangle = Rectangle.init(zlm.Vec2.zero, size) },
             Densities.Water,
             1,
             false,
@@ -117,7 +119,7 @@ pub const DebugScene = struct {
         const e = self.reg.create();
 
         const result = RigidBodyStaticParams.init(
-            .{ .rectangle = Rectangle.init(size) },
+            .{ .rectangle = Rectangle.init(zlm.Vec2.zero, size) },
             Densities.Element.Osmium,
             0.2,
             isStatic,
@@ -131,19 +133,37 @@ pub const DebugScene = struct {
         }
     }
 
-    const numberOfBodiesToAdd = 1000;
+    pub fn addCircle(self: *DebugScene, position: zlm.Vec2, radius: f32, isStatic: bool) void {
+        const e = self.reg.create();
+
+        const result = RigidBodyStaticParams.init(
+            .{ .circle = Circle.init(radius) },
+            Densities.Element.Osmium,
+            0.2,
+            isStatic,
+        );
+
+        switch (result) {
+            .success => |static| {
+                _ = self.physicsSystem.addRigidBody(e, position, static);
+            },
+            .err => |err| std.log.err("{s}", .{err}),
+        }
+    }
+
+    const numberOfBodiesToAdd = 3000;
     var bodiesAdded: usize = 0;
     var addt: f64 = 0;
     var randomPositions: [numberOfBodiesToAdd]zlm.Vec2 = randomPositions: {
         var rand = std.Random.DefaultPrng.init(0);
         var rps: [numberOfBodiesToAdd]zlm.Vec2 = undefined;
 
-        @setEvalBranchQuota(300000);
+        @setEvalBranchQuota(3000000);
 
         for (0..rps.len) |i| {
             rps[i] = .{
-                .x = rand.random().float(f32) * cfg.size.x - cfg.size.x / 2,
-                .y = rand.random().float(f32) * cfg.size.y - cfg.size.y / 2,
+                .x = std.math.clamp(rand.random().float(f32) * cfg.size.x - cfg.size.x / 2, -cfg.size.x / 2 + maxSize.x, cfg.size.x / 2 - maxSize.x),
+                .y = std.math.clamp(rand.random().float(f32) * cfg.size.y - cfg.size.y / 2, -cfg.size.y / 2 + maxSize.y, cfg.size.y / 2 - maxSize.y),
             };
         }
 
@@ -206,9 +226,18 @@ pub const DebugScene = struct {
     }
 
     fn addBodiesUntilLag(self: *DebugScene, dt: f32) void {
-        if (bodiesAdded < randomPositions.len and dt < 0.017) {
-            self.addRectangle(randomPositions[bodiesAdded], self.randomSize(), false);
-            bodiesAdded += 1;
+        if (dt < 0.017) {
+            //if (bodiesAdded < randomPositions.len and dt < 0.017) {
+            //self.addCircle(randomPositions[bodiesAdded], self.randomRadius(), false);
+            const bodiesToAdd = 10;
+            for (0..bodiesToAdd) |i| {
+                if (bodiesAdded + i >= numberOfBodiesToAdd) {
+                    self.addRectangle(self.randomPos(), self.randomSize(), false);
+                } else {
+                    self.addRectangle(randomPositions[bodiesAdded + i], self.randomSize(), false);
+                }
+            }
+            bodiesAdded += bodiesToAdd;
             addt += 0.05;
         }
     }

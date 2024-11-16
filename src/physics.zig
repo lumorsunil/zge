@@ -8,7 +8,7 @@ const ztracy = @import("ztracy");
 
 const cfg = @import("config.zig");
 
-const RigidBody = @import("physics/rigid-body-flat.zig").RigidBodyFlat;
+pub const RigidBody = @import("physics/rigid-body-flat.zig").RigidBodyFlat;
 const RigidBodyStaticParams = @import("physics/rigid-body-static.zig").RigidBodyStaticParams;
 const RigidBodyDynamicParams = @import("physics/rigid-body-dynamic.zig").RigidBodyDynamicParams;
 const RigidBodyContainer = @import("physics/rigid-body-container.zig").RigidBodyContainer;
@@ -16,6 +16,9 @@ const Collision = @import("physics/collision/result.zig").Collision;
 const CollisionContainer = @import("physics/collision/container.zig").CollisionContainer;
 const resolveCollision = @import("physics/collision.zig").resolveCollision;
 const AABB = @import("physics/shape.zig").AABB;
+pub const Densities = @import("physics/rigid-body-static.zig").Densities;
+
+pub const shape = @import("physics/shape.zig");
 
 const sweep = @import("physics/collision/sweep.zig").sweep;
 const SweepLine = @import("physics/collision/sweep.zig").SweepLine;
@@ -52,10 +55,12 @@ pub const PhysicsSystem = struct {
     sweepLineBuffer: ArrayList(SweepLine),
     overlappingBuffer: ArrayList(bool),
 
+    boundary: AABB,
+
     var numberOfPendingCollisions: usize = 0;
     var numberOfCollisionEvents: usize = 0;
 
-    pub fn init(allocator: Allocator, reg: *ecs.Registry) !PhysicsSystem {
+    pub fn init(allocator: Allocator, reg: *ecs.Registry, boundary: AABB) PhysicsSystem {
         const cc = CollisionContainer.init(allocator, reg);
         const cce = reg.create();
         reg.add(cce, cc);
@@ -66,11 +71,13 @@ pub const PhysicsSystem = struct {
             .gravity = zlm.vec2(0, 0),
             .view = reg.basicView(RigidBody),
             .reg = reg,
-            .bodyContainer = try RigidBodyContainer.init(allocator),
+            .bodyContainer = RigidBodyContainer.init(allocator),
             .collisionContainer = ccPtr,
 
-            .sweepLineBuffer = try ArrayList(SweepLine).initCapacity(allocator, 100),
-            .overlappingBuffer = try ArrayList(bool).initCapacity(allocator, 100),
+            .sweepLineBuffer = ArrayList(SweepLine).initCapacity(allocator, 100) catch unreachable,
+            .overlappingBuffer = ArrayList(bool).initCapacity(allocator, 100) catch unreachable,
+
+            .boundary = boundary,
         };
     }
 
@@ -95,8 +102,11 @@ pub const PhysicsSystem = struct {
         for (0..PHYSICS_SUB_STEPS) |_| {
             self.updatePositions(intervalTimeStep);
             self.updateCollisions();
+            //std.log.info("PENDINGCOLLISIONS: {}", .{numberOfPendingCollisions});
             self.resolveCollisions();
         }
+
+        //std.log.info("BODIES: {}", .{self.view.len()});
     }
 
     pub fn updateDynamicSubSteps(self: *PhysicsSystem, dt: f32, maxTimeStep: f32) void {
@@ -213,20 +223,10 @@ pub const PhysicsSystem = struct {
     }
 
     fn updateCollisionsWithContainerQT(self: *PhysicsSystem) void {
-        const boundary = AABB{
-            .tl = zlm.vec2(-cfg.sizeHalfW, -cfg.sizeHalfH),
-            .br = zlm.vec2(cfg.sizeHalfW, cfg.sizeHalfH),
-            .isMinimal = false,
-        };
+        const collisions = self.collisionContainer.checkCollisionsQT(self.boundary);
 
-        self.collisionContainer.tree.populate(boundary, self.view.raw());
-
-        for (self.view.data()) |entity| {
-            const zone = ztracy.ZoneN(@src(), "uc entity");
-            defer zone.End();
-            const body = self.view.get(entity);
-            if (body.s.isStatic) continue;
-            self.collisionContainer.checkCollision(body, entity, self, emitPendingCollision);
+        for (collisions) |collision| {
+            self.emitPendingCollision(collision);
         }
     }
 
@@ -321,19 +321,24 @@ pub const PhysicsSystem = struct {
         numberOfCollisionEvents = 0;
     }
 
+    const AddRigidBodyOptions = struct {
+        pos: zlm.Vec2 = zlm.Vec2.zero,
+        scale: f32 = 1,
+    };
+
     pub fn addRigidBody(
         self: *PhysicsSystem,
         entity: ecs.Entity,
-        pos: zlm.Vec2,
+        options: AddRigidBodyOptions,
         static: RigidBodyStaticParams,
     ) *RigidBody {
         const entityId = self.reg.entityId(entity);
-        std.log.info("RIGID BODY ADDED {}", .{entityId});
+        //std.log.info("RIGID BODY ADDED {}", .{entityId});
         var isPointersInvalidated: bool = false;
 
         self.bodyContainer.setRigidBody(
             entityId,
-            pos,
+            options.pos,
             zlm.vec2(0, 0),
             zlm.vec2(0, 0),
             0,
@@ -352,6 +357,7 @@ pub const PhysicsSystem = struct {
 
         self.reg.add(entity, RigidBody.init(entity, static, dynamic));
         const body = self.view.get(entity);
+        body.d.s = options.scale;
 
         if (collisionType == .rTree) {
             self.collisionContainer.insertBody(entity);

@@ -30,13 +30,13 @@ pub const RigidBodyContainer = struct {
 
     allocator: Allocator,
 
-    pub fn init(allocator: Allocator) !RigidBodyContainer {
+    pub fn init(allocator: Allocator) RigidBodyContainer {
         var c = RigidBodyContainer{
             .allocator = allocator,
             .rigidBodiesCapacity = INITIAL_CAPACITY,
         };
 
-        try c.initRigidBodies();
+        c.initRigidBodies();
 
         return c;
     }
@@ -58,7 +58,7 @@ pub const RigidBodyContainer = struct {
         self.rigidBodiesRotationalAcceleration.deinit();
     }
 
-    fn initRigidBodies(self: *RigidBodyContainer) !void {
+    fn initRigidBodies(self: *RigidBodyContainer) void {
         self.rigidBodiesDynamic = VectorArrayList.initCapacity(self.allocator, self.rigidBodiesCapacity);
         self.rigidBodiesPositionX = VectorArrayList.initCapacity(self.allocator, self.rigidBodiesCapacity);
         self.rigidBodiesPositionY = VectorArrayList.initCapacity(self.allocator, self.rigidBodiesCapacity);

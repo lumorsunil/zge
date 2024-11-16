@@ -9,6 +9,7 @@ pub const RigidBodyDynamicParams = struct {
     r: *f32,
     rv: *f32,
     ra: *f32,
+    s: f32 = 1,
 
     pub fn init(p: pzlm.Vec2, v: pzlm.Vec2, a: pzlm.Vec2, r: *f32, rv: *f32, ra: *f32) RigidBodyDynamicParams {
         return RigidBodyDynamicParams{
@@ -37,5 +38,14 @@ pub const RigidBodyDynamicParams = struct {
     pub fn setVel(self: *RigidBodyDynamicParams, vel: zlm.Vec2) void {
         self.v.x.* = vel.x;
         self.v.y.* = vel.y;
+    }
+
+    pub fn cloneAccel(self: *const RigidBodyDynamicParams) zlm.Vec2 {
+        return zlm.vec2(self.a.x.*, self.a.y.*);
+    }
+
+    pub fn setAccel(self: *RigidBodyDynamicParams, vel: zlm.Vec2) void {
+        self.a.x.* = vel.x;
+        self.a.y.* = vel.y;
     }
 };

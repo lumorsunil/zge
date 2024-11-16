@@ -121,7 +121,45 @@ pub const AABB = struct {
     }
 
     pub fn center(self: AABB) zlm.Vec2 {
-        return self.tl.add(zlm.vec2(self.width() / 2, self.height() / 2));
+        return zlm.vec2(self.centerX(), self.centerY());
+    }
+
+    pub fn centerX(self: AABB) f32 {
+        return self.tl.x + self.width() / 2;
+    }
+
+    pub fn centerY(self: AABB) f32 {
+        return self.tl.y + self.height() / 2;
+    }
+
+    /// Top right
+    pub fn tr(self: AABB) zlm.Vec2 {
+        return zlm.vec2(self.br.x, self.tl.y);
+    }
+
+    /// Bottom left
+    pub fn bl(self: AABB) zlm.Vec2 {
+        return zlm.vec2(self.tl.x, self.br.y);
+    }
+
+    /// Top center
+    pub fn tc(self: AABB) zlm.Vec2 {
+        return zlm.vec2(self.centerX(), self.tl.y);
+    }
+
+    /// Bottom center
+    pub fn bc(self: AABB) zlm.Vec2 {
+        return zlm.vec2(self.centerX(), self.br.y);
+    }
+
+    /// Center left
+    pub fn cl(self: AABB) zlm.Vec2 {
+        return zlm.vec2(self.tl.x, self.centerY());
+    }
+
+    /// Center right
+    pub fn cr(self: AABB) zlm.Vec2 {
+        return zlm.vec2(self.br.x, self.centerY());
     }
 
     pub fn distanceSq(self: AABB, other: AABB) f32 {
@@ -130,6 +168,10 @@ pub const AABB = struct {
 
     pub fn add(self: AABB, v: zlm.Vec2) AABB {
         return AABB{ .tl = self.tl.add(v), .br = self.br.add(v), .isMinimal = self.isMinimal };
+    }
+
+    pub fn scale(self: AABB, s: f32) AABB {
+        return AABB{ .tl = self.tl.scale(s), .br = self.br.scale(s), .isMinimal = self.isMinimal };
     }
 };
 
@@ -172,10 +214,10 @@ pub const Shape = union(enum) {
         };
     }
 
-    pub fn updateTransform(self: *Shape, translation: zlm.Vec2, rotation: f32) void {
+    pub fn updateTransform(self: *Shape, translation: zlm.Vec2, rotation: f32, scale: f32) void {
         switch (self.*) {
-            .circle => |*circle| circle.updateTransform(translation, rotation),
-            .rectangle => |*rectangle| rectangle.updateTransform(translation, rotation),
+            .circle => |*circle| circle.updateTransform(translation, rotation, scale),
+            .rectangle => |*rectangle| rectangle.updateTransform(translation, rotation, scale),
         }
     }
 };
@@ -205,29 +247,31 @@ pub const Circle = struct {
         return self.radius * self.radius * std.math.pi;
     }
 
-    pub fn updateTransform(self: *Circle, translation: zlm.Vec2, rotation: f32) void {
+    pub fn updateTransform(self: *Circle, translation: zlm.Vec2, rotation: f32, scale: f32) void {
         _ = rotation;
+        _ = scale;
 
         self.transformedVertices[0] = translation;
     }
 };
 
 pub const Rectangle = struct {
+    offset: zlm.Vec2,
     size: zlm.Vec2,
     vertices: [4]zlm.Vec2,
     transformedVertices: [4]zlm.Vec2,
+    currentRotation: u32 = 0,
 
-    var currentRotation: u32 = 0;
-
-    pub fn init(size: zlm.Vec2) Rectangle {
+    pub fn init(offset: zlm.Vec2, size: zlm.Vec2) Rectangle {
         var rect = Rectangle{
+            .offset = offset,
             .size = size,
             .vertices = undefined,
             .transformedVertices = undefined,
         };
 
-        vertices(rect.size, &rect.vertices);
-        updateTransform(&rect, zlm.Vec2.zero, 0);
+        vertices(rect.offset, rect.size, &rect.vertices);
+        updateTransform(&rect, zlm.Vec2.zero, 0, 1);
 
         return rect;
     }
@@ -260,11 +304,11 @@ pub const Rectangle = struct {
         return @max(self.width(), self.height());
     }
 
-    pub fn vertices(size: zlm.Vec2, buffer: *[4]zlm.Vec2) void {
-        const l = -size.x / 2;
-        const r = -l;
-        const t = -size.y / 2;
-        const b = -t;
+    pub fn vertices(offset: zlm.Vec2, size: zlm.Vec2, buffer: *[4]zlm.Vec2) void {
+        const l = -size.x / 2 + offset.x;
+        const r = size.x / 2 + offset.x;
+        const t = -size.y / 2 + offset.y;
+        const b = size.y / 2 + offset.y;
 
         buffer[0] = zlm.vec2(l, t);
         buffer[1] = zlm.vec2(r, t);
@@ -272,15 +316,15 @@ pub const Rectangle = struct {
         buffer[3] = zlm.vec2(l, b);
     }
 
-    pub fn updateTransform(self: *Rectangle, translation: zlm.Vec2, rotation: f32) void {
-        if (@as(u32, @bitCast(rotation)) != currentRotation) {
-            currentRotation = @as(u32, @bitCast(rotation));
+    pub fn updateTransform(self: *Rectangle, translation: zlm.Vec2, rotation: f32, scale: f32) void {
+        if (@as(u32, @bitCast(rotation)) != self.currentRotation) {
+            self.currentRotation = @as(u32, @bitCast(rotation));
             for (0.., self.vertices) |i, v| {
-                self.transformedVertices[i] = v.rotate(rotation).add(translation);
+                self.transformedVertices[i] = v.scale(scale).rotate(rotation).add(translation);
             }
         } else {
             for (0.., self.vertices) |i, v| {
-                self.transformedVertices[i] = v.add(translation);
+                self.transformedVertices[i] = v.scale(scale).add(translation);
             }
         }
     }

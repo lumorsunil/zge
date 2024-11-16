@@ -23,10 +23,10 @@ pub const Camera = struct {
         return self.r * 180 / std.math.pi;
     }
 
-    pub fn transformV(self: Camera, v__: zlm.Vec2) zlm.Vec2 {
-        const v_ = self.position.add(v__).scale(self.s);
+    pub fn transformV(self: Camera, position: zlm.Vec2) zlm.Vec2 {
+        const transformedPosition = self.position.add(position).scale(self.s);
 
-        if (self.r == 0) return v_;
+        if (self.r == 0) return transformedPosition;
 
         unreachable;
     }

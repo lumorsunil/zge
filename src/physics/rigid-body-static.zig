@@ -21,6 +21,7 @@ pub const MAX_RESTITUTION: f32 = 1;
 pub const Densities = struct {
     pub const Wood = 0.5;
     pub const Water = 1;
+    pub const Human = 1.1;
 
     pub const Element = struct {
         pub const Hydrogen = 0.0899;
@@ -190,7 +191,7 @@ pub const RigidBodyStaticParams = struct {
         return self.shape.transformedVertices();
     }
 
-    pub fn updateTransform(self: *RigidBodyStaticParams, translation: zlm.Vec2, rotation: f32) void {
-        self.shape.updateTransform(translation, rotation);
+    pub fn updateTransform(self: *RigidBodyStaticParams, translation: zlm.Vec2, rotation: f32, scale: f32) void {
+        self.shape.updateTransform(translation, rotation, scale);
     }
 };

@@ -20,7 +20,7 @@ pub fn main() !void {
     var reg = ecs.Registry.init(allocator);
     defer reg.deinit();
 
-    var scene = try DebugScene.init(allocator, &reg);
+    var scene = DebugScene.init(allocator, &reg);
     defer scene.deinit();
     scene.bind();
 

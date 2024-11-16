@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
 const ztracy = @import("ztracy");
 const zlm = @import("zlm");
 const RTree = @import("r-tree.zig").RTree;
@@ -58,6 +59,7 @@ pub const CollisionContainer = struct {
     allocator: Allocator,
     view: ecs.BasicView(RigidBody),
     reg: *ecs.Registry,
+    collisions: ArrayList(Collision),
 
     pub const RTreeEntry = CCRTreeEntry;
     pub const RTree = CCRTree;
@@ -83,11 +85,13 @@ pub const CollisionContainer = struct {
             .allocator = allocator,
             .view = reg.basicView(RigidBody),
             .reg = reg,
+            .collisions = ArrayList(Collision).init(allocator),
         };
     }
 
     pub fn deinit(self: CollisionContainer) void {
         self.tree.deinit();
+        self.collisions.deinit();
     }
 
     pub fn insertBody(self: *CollisionContainer, entity: ecs.Entity) void {
@@ -122,8 +126,53 @@ pub const CollisionContainer = struct {
         }
     }
 
-    // TODO: Replace callback with returning a list or populating an event list in container for the physics system to consume instead
-    pub fn checkCollision(self: *CollisionContainer, body: *RigidBody, entity: ecs.Entity, context: anytype, callback: fn (context: @TypeOf(context), collision: Collision) void) void {
+    pub fn checkCollisionsQT(self: *CollisionContainer, boundary: AABB) []Collision {
+        self.collisions.resize(0) catch unreachable;
+        self.tree.populateAndIntersect(boundary, self.view.raw(), self, intersectionHandler);
+        return self.collisions.items;
+    }
+
+    fn intersectionHandler(
+        self: *CollisionContainer,
+        body: *RigidBody,
+        intersections: []Intersection(*RigidBody),
+    ) void {
+        for (intersections) |intersection| {
+            const other = intersection.entry;
+
+            if (body.s.isStatic and other.s.isStatic) {
+                continue;
+            }
+
+            if (body.aabb.isMinimal and other.aabb.isMinimal) {
+                self.collisions.append(Collision{
+                    .bodyA = body,
+                    .bodyB = other,
+                    .depth = intersection.depth,
+                    .normal = intersection.axis,
+                    .contact1 = undefined,
+                    .contact2 = undefined,
+                    .contactCount = undefined,
+                }) catch unreachable;
+                continue;
+            }
+
+            const result = body.checkCollision(other);
+
+            switch (result) {
+                .noCollision => continue,
+                .collision => |collision| self.collisions.append(collision) catch unreachable,
+            }
+        }
+    }
+
+    pub fn checkCollision(
+        self: *CollisionContainer,
+        body: *RigidBody,
+        entity: ecs.Entity,
+        context: anytype,
+        callback: fn (context: @TypeOf(context), collision: Collision) void,
+    ) void {
         const zone = ztracy.ZoneNC(@src(), "CC: check collision", 0xff_ff_00_00);
         defer zone.End();
         const entityId = self.reg.entityId(entity);

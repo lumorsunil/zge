@@ -9,7 +9,7 @@ pub fn build(b: *std.Build) void {
 
     const optimize = b.standardOptimizeOption(.{});
 
-    _ = b.addModule("zge", .{
+    var zge = b.addModule("zge", .{
         .root_source_file = b.path("src/zge.zig"),
     });
 
@@ -31,6 +31,7 @@ pub fn build(b: *std.Build) void {
     exe.linkLibrary(raylib_artifact);
     exe.root_module.addImport("raylib", raylib);
     exe.root_module.addImport("raygui", raygui);
+    zge.addImport("raylib", raylib);
 
     const ecs_dep = b.dependency("entt", .{
         .target = target,
@@ -38,10 +39,12 @@ pub fn build(b: *std.Build) void {
     });
     const ecs = ecs_dep.module("zig-ecs");
     exe.root_module.addImport("ecs", ecs);
+    zge.addImport("ecs", ecs);
 
     const zlm_dep = b.dependency("zlm", .{});
     const zlm = zlm_dep.module("zlm");
     exe.root_module.addImport("zlm", zlm);
+    zge.addImport("zlm", zlm);
 
     const ztracy_dep = b.dependency("ztracy", .{
         .enable_ztracy = options.enable_ztracy,
@@ -49,6 +52,7 @@ pub fn build(b: *std.Build) void {
     const ztracy = ztracy_dep.module("root");
     exe.root_module.addImport("ztracy", ztracy);
     exe.linkLibrary(ztracy_dep.artifact("tracy"));
+    zge.addImport("ztracy", ztracy);
 
     b.installArtifact(exe);
 

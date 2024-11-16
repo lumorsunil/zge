@@ -32,7 +32,7 @@ pub const RigidBodyFlat = struct {
     }
 
     pub fn aabb(self: RigidBodyFlat) AABB {
-        return self.s.aabb(self.d.r.*).add(.{ .x = self.d.p.x.*, .y = self.d.p.y.* });
+        return self.s.aabb(self.d.r.*).scale(self.d.s).add(.{ .x = self.d.p.x.*, .y = self.d.p.y.* });
     }
 
     pub fn radius(self: *const RigidBodyFlat) f32 {
@@ -48,7 +48,7 @@ pub const RigidBodyFlat = struct {
     }
 
     pub fn updateTransform(self: *RigidBodyFlat) void {
-        self.s.updateTransform(self.d.clonePos(), self.d.r.*);
+        self.s.updateTransform(self.d.clonePos(), self.d.r.*, self.d.s);
         self.aabb = RigidBodyFlat.aabb(self.*);
     }
 

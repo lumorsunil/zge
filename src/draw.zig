@@ -5,6 +5,7 @@ const rl = @import("raylib");
 const zlm = @import("zlm");
 const ecs = @import("ecs");
 const util = @import("util.zig");
+const vector = @import("vector.zig");
 
 const RigidBody = @import("physics/rigid-body-flat.zig").RigidBodyFlat;
 const AABB = @import("physics/shape.zig").AABB;
@@ -14,6 +15,7 @@ const CollisionContainer = @import("physics/collision/container.zig").CollisionC
 const ccAlgorithm = @import("physics/collision/container.zig").ccAlgorithm;
 const Camera = @import("camera.zig").Camera;
 const Screen = @import("screen.zig").Screen;
+const TextureComponent = @import("components.zig").TextureComponent;
 
 const z2r = @import("vector.zig").z2r;
 const z2rect = @import("vector.zig").z2rect;
@@ -22,17 +24,24 @@ pub const DrawSystem = struct {
     screen: *const Screen,
     reg: *ecs.Registry,
     view: ecs.BasicView(RigidBody),
+    textureView: ecs.MultiView(2, 0),
+    shapeView: ecs.MultiView(1, 1),
     ccView: ecs.BasicView(CollisionContainer),
     drawOrderList: ArrayList(ecs.Entity),
     allocator: Allocator,
 
-    pub fn init(allocator: Allocator, reg: *ecs.Registry, screen: *const Screen) !DrawSystem {
+    var showQTGrid = false;
+    var showCollisionBoxes = false;
+
+    pub fn init(allocator: Allocator, reg: *ecs.Registry, screen: *const Screen) DrawSystem {
         return DrawSystem{
             .screen = screen,
             .reg = reg,
             .view = reg.basicView(RigidBody),
+            .textureView = reg.view(.{ TextureComponent, RigidBody }, .{}),
+            .shapeView = reg.view(.{RigidBody}, .{TextureComponent}),
             .ccView = reg.basicView(CollisionContainer),
-            .drawOrderList = try ArrayList(ecs.Entity).initCapacity(allocator, 100),
+            .drawOrderList = ArrayList(ecs.Entity).initCapacity(allocator, 100) catch unreachable,
             .allocator = allocator,
         };
     }
@@ -51,13 +60,35 @@ pub const DrawSystem = struct {
     }
 
     pub fn draw(self: *DrawSystem, camera: Camera) void {
-        for (self.drawOrder()) |entity| {
-            const body = self.view.getConst(entity);
-
-            self.drawShape(body, camera);
+        if (rl.isKeyPressed(rl.KeyboardKey.key_q)) {
+            showQTGrid = !showQTGrid;
+        }
+        if (rl.isKeyPressed(rl.KeyboardKey.key_c)) {
+            showCollisionBoxes = !showCollisionBoxes;
         }
 
-        self.drawCollisionContainer(camera);
+        for (self.drawOrder()) |entity| {
+            const body = self.view.get(entity);
+            const maybeTexture = self.reg.tryGetConst(TextureComponent, entity);
+
+            if (maybeTexture) |texture| {
+                self.drawTexture(
+                    texture.texture,
+                    body.d.clonePos(),
+                    body.d.r.*,
+                    body.d.s,
+                    camera,
+                );
+            }
+
+            if (showCollisionBoxes) {
+                self.drawShape(body, camera);
+            }
+        }
+
+        if (showQTGrid) {
+            self.drawCollisionContainer(camera);
+        }
     }
 
     const ccEntryColor = rl.Color.lime;
@@ -82,17 +113,18 @@ pub const DrawSystem = struct {
         }
     }
 
-    fn drawPageQT(self: *DrawSystem, page: *CollisionContainer.QT.Node, level: usize, camera: Camera) void {
+    fn drawPageQT(self: *DrawSystem, maybePage: ?*CollisionContainer.QT.Page, level: usize, camera: Camera) void {
+        if (maybePage == null) return;
+        const page = maybePage.?;
+
         const color = ccLevelColors[@min(level, ccLevelColors.len - 1)];
 
-        if (page.page.quadrants) |quadrants| {
-            self.drawPageQT(quadrants.tl, level + 1, camera);
-            self.drawPageQT(quadrants.tr, level + 1, camera);
-            self.drawPageQT(quadrants.bl, level + 1, camera);
-            self.drawPageQT(quadrants.br, level + 1, camera);
-        }
+        self.drawPageQT(page.quadrants.tl, level + 1, camera);
+        self.drawPageQT(page.quadrants.tr, level + 1, camera);
+        self.drawPageQT(page.quadrants.bl, level + 1, camera);
+        self.drawPageQT(page.quadrants.br, level + 1, camera);
 
-        self.drawAabb(page.page.aabb, color, 2, camera);
+        self.drawAabb(page.aabb, color, 2, camera);
     }
 
     fn drawPage(self: *DrawSystem, page: *CollisionContainer.RTree.Page, level: usize, height: usize, camera: Camera) void {
@@ -153,7 +185,14 @@ pub const DrawSystem = struct {
         return self.drawOrderList.items[0..self.view.len()];
     }
 
-    pub fn drawTexture(self: DrawSystem, texture: *const rl.Texture2D, position: zlm.Vec2, rotation: f32, scale: f32, camera: Camera) void {
+    pub fn drawTexture(
+        self: DrawSystem,
+        texture: *const rl.Texture2D,
+        position: zlm.Vec2,
+        rotation: f32,
+        scale: f32,
+        camera: Camera,
+    ) void {
         const s = scale * camera.s;
         const r = rotation + camera.angle();
         const w = @as(f32, @floatFromInt(texture.width));
@@ -161,24 +200,24 @@ pub const DrawSystem = struct {
         const textureSize = zlm.vec2(w, h);
         const p = position.sub(textureSize.scale(0.5 * scale));
 
-        const screenP = camera.transformV(self.screen.screenPosition(p.scale(camera.s)));
+        const screenP = camera.transformV(self.screen.screenPositionV(p));
         const screenS = textureSize.scale(s);
 
         const source = z2rect(zlm.Vec2.zero, textureSize);
         const dest = z2rect(screenP, screenS);
-        const origin = dest.scale(-0.5);
+        const origin = zlm.Vec2.zero;
 
         rl.drawTexturePro(texture.*, source, dest, z2r(origin), r, rl.Color.white);
     }
 
-    pub fn drawShape(self: DrawSystem, rb: RigidBody, camera: Camera) void {
+    pub fn drawShape(self: DrawSystem, rb: *RigidBody, camera: Camera) void {
         switch (rb.s.shape) {
             .circle => |circle| self.drawCircle(circle, rb, camera),
             .rectangle => |rectangle| self.drawRectangle(rectangle, rb, camera),
         }
     }
 
-    pub fn drawCircle(self: DrawSystem, circle: Circle, rb: RigidBody, camera: Camera) void {
+    pub fn drawCircle(self: DrawSystem, circle: Circle, rb: *RigidBody, camera: Camera) void {
         const s = camera.s;
 
         const screenP = camera.transformV(self.screen.screenPosition(rb.d.p.x.*, rb.d.p.y.*));
@@ -186,22 +225,21 @@ pub const DrawSystem = struct {
         rl.drawCircleLinesV(z2r(screenP), circle.radius * s, rl.Color.white);
     }
 
-    pub fn drawRectangle(self: DrawSystem, rect: Rectangle, rb: RigidBody, camera: Camera) void {
-        const s = camera.s;
-        const halfRect = rect.size.scale(1 / 2);
-        const p = zlm.vec2(rb.d.p.x.*, rb.d.p.y.*).sub(halfRect);
+    pub fn drawRectangle(self: DrawSystem, _: Rectangle, rb: *RigidBody, camera: Camera) void {
+        var transformedVertices: [5]rl.Vector2 = .{
+            vector.z2r(self.screen.screenPositionV(camera.transformV(rb.aabb.tl))),
+            vector.z2r(self.screen.screenPositionV(camera.transformV(rb.aabb.tr()))),
+            vector.z2r(self.screen.screenPositionV(camera.transformV(rb.aabb.br))),
+            vector.z2r(self.screen.screenPositionV(camera.transformV(rb.aabb.bl()))),
+            vector.z2r(self.screen.screenPositionV(camera.transformV(rb.aabb.tl))),
+        };
 
-        const screenP = camera.transformV(self.screen.screenPosition(p.x, p.y));
+        const color = if (ccAlgorithm == .quadTree)
+            if (self.ccView.raw()[0].tree.isEntryInTree(rb)) rl.Color.white else rl.Color.red
+        else
+            rl.Color.white;
 
-        var transformedVertices: [5]rl.Vector2 = undefined;
-
-        for (0..4) |i| {
-            const v = rect.vertices[i].rotate(rb.d.r.*).scale(s).add(zlm.vec2(screenP.x, screenP.y));
-            transformedVertices[i] = rl.Vector2.init(v.x, v.y);
-        }
-        transformedVertices[4] = transformedVertices[0];
-
-        rl.drawLineStrip(&transformedVertices, rl.Color.white);
+        rl.drawLineStrip(&transformedVertices, color);
     }
 
     fn drawDebugBorder(self: DrawSystem, camera: Camera) void {
