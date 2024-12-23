@@ -1,7 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const rl = @import("raylib");
-const zlm = @import("zlm");
 const ecs = @import("ecs");
 
 const cfg = @import("config.zig");
@@ -11,36 +10,49 @@ const PhysicsSystem = @import("physics.zig").PhysicsSystem;
 const DrawSystem = @import("draw.zig").DrawSystem;
 const Camera = @import("camera.zig").Camera;
 
-const CollisionEvent = @import("physics.zig").CollisionEvent;
+const V = @import("vector.zig").V;
+const Vector = @import("vector.zig").Vector;
+
+const CollisionEvent = @import("physics.zig").Collision;
 
 const RigidBody = @import("physics/rigid-body-flat.zig").RigidBodyFlat;
 const RigidBodyStaticParams = @import("physics/rigid-body-static.zig").RigidBodyStaticParams;
+const AABB = @import("physics/shape.zig").AABB;
 const Rectangle = @import("physics/shape.zig").Rectangle;
 const Circle = @import("physics/shape.zig").Circle;
 const Densities = @import("physics/rigid-body-static.zig").Densities;
 
-var screen = Screen.init(cfg.size.x, cfg.size.y);
+var screen = Screen.init(cfg.size);
+var camera = Camera.init();
 
 pub const DebugScene = struct {
+    allocator: Allocator,
     reg: *ecs.Registry,
     rand: std.Random.DefaultPrng,
     player: ecs.Entity,
 
     screen: *const Screen,
-    camera: Camera,
-    physicsSystem: PhysicsSystem,
-    drawSystem: DrawSystem,
+    camera: *Camera,
+    physicsSystem: PhysicsSystem = undefined,
+    drawSystem: DrawSystem = undefined,
+
+    const boundary: AABB = .{
+        .tl = -cfg.sizeHalf,
+        .br = cfg.sizeHalf,
+        .isMinimal = true,
+    };
 
     pub fn init(allocator: Allocator, reg: *ecs.Registry) DebugScene {
         return DebugScene{
+            .allocator = allocator,
             .reg = reg,
             .rand = std.Random.DefaultPrng.init(0),
             .player = 0,
 
             .screen = &screen,
-            .camera = Camera.init(),
-            .physicsSystem = PhysicsSystem.init(allocator, reg),
-            .drawSystem = DrawSystem.init(allocator, reg, &screen),
+            .camera = &camera,
+            .physicsSystem = PhysicsSystem.init(allocator, reg, boundary),
+            .drawSystem = DrawSystem.init(allocator, reg, &screen, &camera),
         };
     }
 
@@ -53,24 +65,21 @@ pub const DebugScene = struct {
         self.drawSystem.deinit();
     }
 
-    pub fn randomPos(self: *DebugScene) zlm.Vec2 {
-        return zlm.vec2(
-            self.rand.random().float(f32) * cfg.size.x - cfg.size.x / 2,
-            self.rand.random().float(f32) * cfg.size.y - cfg.size.y / 2,
-        );
+    pub fn randomPos(self: *DebugScene) Vector {
+        return V.random(&self.rand) * cfg.size - cfg.size / V.scalar(2);
     }
 
-    const maxSize = zlm.vec2(maxRadius * 2, maxRadius * 2);
-    pub fn randomSize(self: *DebugScene) zlm.Vec2 {
-        return zlm.vec2(
+    const maxSize = V.all(maxRadius * 2);
+    pub fn randomSize(self: *DebugScene) Vector {
+        return V.init(
             self.randomRadius() * 2,
             self.randomRadius() * 2,
         );
     }
 
-    const maxRadius = 1 + 5;
+    const maxRadius = 0.1 + 1;
     pub fn randomRadius(self: *DebugScene) f32 {
-        return 1 + 5 * self.rand.random().float(f32);
+        return 0.1 + 1 * self.rand.random().float(f32);
     }
 
     pub fn addRandomCircle(self: *DebugScene) void {
@@ -95,13 +104,13 @@ pub const DebugScene = struct {
         self.addRectangle(self.randomPos(), self.randomSize(), self.rand.random().boolean());
     }
 
-    pub fn addPlayer(self: *DebugScene, position: zlm.Vec2, size: zlm.Vec2) void {
+    pub fn addPlayer(self: *DebugScene, position: Vector, size: Vector) void {
         const e = self.reg.create();
 
         self.player = e;
 
         const result = RigidBodyStaticParams.init(
-            .{ .rectangle = Rectangle.init(zlm.Vec2.zero, size) },
+            .{ .rectangle = Rectangle.init(V.zero, size) },
             Densities.Water,
             1,
             false,
@@ -109,17 +118,22 @@ pub const DebugScene = struct {
 
         switch (result) {
             .success => |static| {
-                _ = self.physicsSystem.addRigidBody(e, position, static);
+                _ = self.physicsSystem.addRigidBody(e, .{ .pos = position }, static);
             },
             .err => |err| std.log.err("{s}", .{err}),
         }
     }
 
-    pub fn addRectangle(self: *DebugScene, position: zlm.Vec2, size: zlm.Vec2, isStatic: bool) void {
+    pub fn addRectangle(
+        self: *DebugScene,
+        position: Vector,
+        size: Vector,
+        isStatic: bool,
+    ) void {
         const e = self.reg.create();
 
         const result = RigidBodyStaticParams.init(
-            .{ .rectangle = Rectangle.init(zlm.Vec2.zero, size) },
+            .{ .rectangle = Rectangle.init(V.zero, size) },
             Densities.Element.Osmium,
             0.2,
             isStatic,
@@ -127,13 +141,13 @@ pub const DebugScene = struct {
 
         switch (result) {
             .success => |static| {
-                _ = self.physicsSystem.addRigidBody(e, position, static);
+                _ = self.physicsSystem.addRigidBody(e, .{ .pos = position }, static);
             },
             .err => |err| std.log.err("{s}", .{err}),
         }
     }
 
-    pub fn addCircle(self: *DebugScene, position: zlm.Vec2, radius: f32, isStatic: bool) void {
+    pub fn addCircle(self: *DebugScene, position: Vector, radius: f32, isStatic: bool) void {
         const e = self.reg.create();
 
         const result = RigidBodyStaticParams.init(
@@ -145,66 +159,69 @@ pub const DebugScene = struct {
 
         switch (result) {
             .success => |static| {
-                _ = self.physicsSystem.addRigidBody(e, position, static);
+                _ = self.physicsSystem.addRigidBody(e, .{ .pos = position }, static);
             },
             .err => |err| std.log.err("{s}", .{err}),
         }
     }
 
-    const numberOfBodiesToAdd = 3000;
+    const numberOfBodiesToAdd = 100;
     var bodiesAdded: usize = 0;
     var addt: f64 = 0;
-    var randomPositions: [numberOfBodiesToAdd]zlm.Vec2 = randomPositions: {
+    var randomPositions: [numberOfBodiesToAdd]Vector = randomPositions: {
         var rand = std.Random.DefaultPrng.init(0);
-        var rps: [numberOfBodiesToAdd]zlm.Vec2 = undefined;
+        var rps: [numberOfBodiesToAdd]Vector = undefined;
 
         @setEvalBranchQuota(3000000);
 
         for (0..rps.len) |i| {
-            rps[i] = .{
-                .x = std.math.clamp(rand.random().float(f32) * cfg.size.x - cfg.size.x / 2, -cfg.size.x / 2 + maxSize.x, cfg.size.x / 2 - maxSize.x),
-                .y = std.math.clamp(rand.random().float(f32) * cfg.size.y - cfg.size.y / 2, -cfg.size.y / 2 + maxSize.y, cfg.size.y / 2 - maxSize.y),
-            };
+            rps[i] = V.init(
+                std.math.clamp(
+                    rand.random().float(f32) * V.x(cfg.size) - V.x(cfg.size) / 2,
+                    -V.x(cfg.size) / 2 + V.x(maxSize),
+                    V.x(cfg.size) / 2 - V.x(maxSize),
+                ),
+                std.math.clamp(
+                    rand.random().float(f32) * V.y(cfg.size) - V.y(cfg.size) / 2,
+                    -V.y(cfg.size) / 2 + V.y(maxSize),
+                    V.y(cfg.size) / 2 - V.y(maxSize),
+                ),
+            );
         }
 
         const Sorter = struct {
-            pub fn lessThanFn(_: void, lhs: zlm.Vec2, rhs: zlm.Vec2) bool {
-                return lhs.x < rhs.x;
+            pub fn lessThanFn(_: void, lhs: Vector, rhs: Vector) bool {
+                return V.x(lhs) < V.x(rhs);
             }
         };
 
-        std.mem.sort(zlm.Vec2, &rps, {}, Sorter.lessThanFn);
+        std.mem.sort(Vector, &rps, {}, Sorter.lessThanFn);
 
         break :randomPositions rps;
     };
 
     pub fn update(self: *DebugScene, dt: f32, t: f64) void {
         _ = t; // autofix
-        var force = zlm.Vec2.zero;
-        const speed = 10;
+        var force = V.zero;
+        const speed = 1000;
 
         if (rl.isKeyDown(rl.KeyboardKey.key_a)) {
-            force.x -= speed;
+            force -= V.onlyX(speed);
         }
         if (rl.isKeyDown(rl.KeyboardKey.key_d)) {
-            force.x += speed;
+            force += V.onlyX(speed);
         }
         if (rl.isKeyDown(rl.KeyboardKey.key_w)) {
-            force.y -= speed;
+            force -= V.onlyY(speed);
         }
         if (rl.isKeyDown(rl.KeyboardKey.key_s)) {
-            force.y += speed;
+            force += V.onlyY(speed);
         }
 
         if (rl.isMouseButtonPressed(rl.MouseButton.mouse_button_left)) {
             for (0..1) |_| {
                 self.addRectangle(
-                    zlm.vec2(
-                        @floatFromInt(rl.getMouseX()),
-                        @floatFromInt(rl.getMouseY()),
-                    ).sub(
-                        cfg.size.div(zlm.Vec2.all(2)),
-                    ),
+                    V.fromRl(rl.getMousePosition()) - cfg.sizeHalf,
                     self.randomSize(),
                     false,
                 );
@@ -229,7 +246,7 @@ pub const DebugScene = struct {
         if (dt < 0.017) {
             //if (bodiesAdded < randomPositions.len and dt < 0.017) {
             //self.addCircle(randomPositions[bodiesAdded], self.randomRadius(), false);
-            const bodiesToAdd = 10;
+            const bodiesToAdd = 100;
             for (0..bodiesToAdd) |i| {
                 if (bodiesAdded + i >= numberOfBodiesToAdd) {
                     self.addRectangle(self.randomPos(), self.randomSize(), false);
@@ -250,7 +267,7 @@ pub const DebugScene = struct {
     pub fn draw(self: *DebugScene) void {
         rl.beginDrawing();
         rl.clearBackground(rl.Color.dark_blue);
-        self.drawSystem.draw(self.camera);
+        self.drawSystem.draw();
         rl.drawFPS(5, 5);
         defer rl.endDrawing();
     }

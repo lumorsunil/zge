@@ -1,5 +1,6 @@
 const std = @import("std");
-const zlm = @import("zlm");
+
+const Vector = @import("../vector.zig").Vector;
 
 const Shape = @import("shape.zig").Shape;
 const AABB = @import("shape.zig").AABB;
@@ -128,6 +129,7 @@ pub const RigidBodyStaticParams = struct {
     restitution: f32,
 
     isStatic: bool,
+    isSolid: bool = true,
 
     shape: Shape,
 
@@ -177,21 +179,18 @@ pub const RigidBodyStaticParams = struct {
     }
 
     pub fn mass(self: RigidBodyStaticParams) f32 {
-        const v = self.volume();
-        if (v == 0) return 0;
-        const d = self.density;
-        return d / v;
+        return self.volume() * self.density;
     }
 
-    pub fn vertices(self: *const RigidBodyStaticParams) []const zlm.Vec2 {
+    pub fn vertices(self: *const RigidBodyStaticParams) []const Vector {
         return self.shape.vertices();
     }
 
-    pub fn transformedVertices(self: *const RigidBodyStaticParams) []const zlm.Vec2 {
+    pub fn transformedVertices(self: *const RigidBodyStaticParams) []const Vector {
         return self.shape.transformedVertices();
     }
 
-    pub fn updateTransform(self: *RigidBodyStaticParams, translation: zlm.Vec2, rotation: f32, scale: f32) void {
+    pub fn updateTransform(self: *RigidBodyStaticParams, translation: Vector, rotation: f32, scale: f32) void {
         self.shape.updateTransform(translation, rotation, scale);
     }
 };

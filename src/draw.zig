@@ -2,7 +2,6 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const rl = @import("raylib");
-const zlm = @import("zlm");
 const ecs = @import("ecs");
 const util = @import("util.zig");
 const vector = @import("vector.zig");
@@ -16,12 +15,14 @@ const ccAlgorithm = @import("physics/collision/container.zig").ccAlgorithm;
 const Camera = @import("camera.zig").Camera;
 const Screen = @import("screen.zig").Screen;
 const TextureComponent = @import("components.zig").TextureComponent;
+const Invisible = @import("components.zig").Invisible;
 
-const z2r = @import("vector.zig").z2r;
-const z2rect = @import("vector.zig").z2rect;
+const V = @import("vector.zig").V;
+const Vector = @import("vector.zig").Vector;
 
 pub const DrawSystem = struct {
     screen: *const Screen,
+    camera: *Camera,
     reg: *ecs.Registry,
     view: ecs.BasicView(RigidBody),
     textureView: ecs.MultiView(2, 0),
@@ -33,9 +34,10 @@ pub const DrawSystem = struct {
     var showQTGrid = false;
     var showCollisionBoxes = false;
 
-    pub fn init(allocator: Allocator, reg: *ecs.Registry, screen: *const Screen) DrawSystem {
+    pub fn init(allocator: Allocator, reg: *ecs.Registry, screen: *const Screen, camera: *Camera) DrawSystem {
         return DrawSystem{
             .screen = screen,
+            .camera = camera,
             .reg = reg,
             .view = reg.basicView(RigidBody),
             .textureView = reg.view(.{ TextureComponent, RigidBody }, .{}),
@@ -59,7 +61,7 @@ pub const DrawSystem = struct {
         self.reg.onConstruct(RigidBody).disconnectBound(self);
     }
 
-    pub fn draw(self: *DrawSystem, camera: Camera) void {
+    pub fn draw(self: *DrawSystem) void {
         if (rl.isKeyPressed(rl.KeyboardKey.key_q)) {
             showQTGrid = !showQTGrid;
         }
@@ -72,23 +74,21 @@ pub const DrawSystem = struct {
             const maybeTexture = self.reg.tryGetConst(TextureComponent, entity);
 
             if (maybeTexture) |texture| {
-                self.drawTexture(
-                    texture.texture,
-                    body.d.clonePos(),
-                    body.d.r.*,
-                    body.d.s,
-                    camera,
-                );
+                self.drawTextureComponent(texture, body);
             }
 
             if (showCollisionBoxes) {
-                self.drawShape(body, camera);
+                self.drawShape(body);
             }
         }
 
         if (showQTGrid) {
-            self.drawCollisionContainer(camera);
+            self.drawCollisionContainer();
         }
+    }
+
+    fn screenCoords(self: *DrawSystem, v: Vector) Vector {
+        return self.screen.screenPositionV(self.camera.transformV(v));
     }
 
     const ccEntryColor = rl.Color.lime;
@@ -103,58 +103,58 @@ pub const DrawSystem = struct {
         rl.Color.black,
     };
 
-    fn drawCollisionContainer(self: *DrawSystem, camera: Camera) void {
+    fn drawCollisionContainer(self: *DrawSystem) void {
         const cc = self.ccView.raw()[0];
 
         if (ccAlgorithm == .rTree) {
-            self.drawPage(cc.tree.root, 1, cc.tree.height, camera);
+            self.drawPage(cc.tree.root, 1, cc.tree.height);
         } else {
-            self.drawPageQT(cc.tree.getRoot(), 0, camera);
+            self.drawPageQT(cc.tree.getRoot(), 0);
         }
     }
 
-    fn drawPageQT(self: *DrawSystem, maybePage: ?*CollisionContainer.QT.Page, level: usize, camera: Camera) void {
+    fn drawPageQT(self: *DrawSystem, maybePage: ?*CollisionContainer.QT.Page, level: usize) void {
         if (maybePage == null) return;
         const page = maybePage.?;
 
         const color = ccLevelColors[@min(level, ccLevelColors.len - 1)];
 
-        self.drawPageQT(page.quadrants.tl, level + 1, camera);
-        self.drawPageQT(page.quadrants.tr, level + 1, camera);
-        self.drawPageQT(page.quadrants.bl, level + 1, camera);
-        self.drawPageQT(page.quadrants.br, level + 1, camera);
+        self.drawPageQT(page.quadrants.tl, level + 1);
+        self.drawPageQT(page.quadrants.tr, level + 1);
+        self.drawPageQT(page.quadrants.bl, level + 1);
+        self.drawPageQT(page.quadrants.br, level + 1);
 
-        self.drawAabb(page.aabb, color, 2, camera);
+        self.drawAabb(page.aabb, color, 2);
     }
 
-    fn drawPage(self: *DrawSystem, page: *CollisionContainer.RTree.Page, level: usize, height: usize, camera: Camera) void {
+    fn drawPage(self: *DrawSystem, page: *CollisionContainer.RTree.Page, level: usize, height: usize) void {
         std.debug.assert(level <= height);
         const color = ccLevelColors[@min(height - level, ccLevelColors.len - 1)];
 
-        self.drawAabb(page.aabb, color, @as(f32, @floatFromInt(page.calculateHeight())) - 1, camera);
+        self.drawAabb(page.aabb, color, @as(f32, @floatFromInt(page.calculateHeight())) - 1);
 
         for (page.children.items) |child| {
-            self.drawNode(child.*, level + 1, height, camera);
+            self.drawNode(child.*, level + 1, height);
         }
     }
 
-    fn drawNode(self: *DrawSystem, node: CollisionContainer.RTree.Node, level: usize, height: usize, camera: Camera) void {
+    fn drawNode(self: *DrawSystem, node: CollisionContainer.RTree.Node, level: usize, height: usize) void {
         switch (node) {
-            .page => |page| self.drawPage(page, level, height, camera),
-            .entry => |entry| self.drawEntry(entry.entry, camera),
+            .page => |page| self.drawPage(page, level, height),
+            .entry => |entry| self.drawEntry(entry.entry),
         }
     }
 
-    fn drawEntry(self: *DrawSystem, entry: CollisionContainer.RTreeEntry, camera: Camera) void {
-        self.drawAabb(CollisionContainer.entryAabb(entry), ccEntryColor, 1, camera);
+    fn drawEntry(self: *DrawSystem, entry: CollisionContainer.RTreeEntry) void {
+        self.drawAabb(CollisionContainer.entryAabb(entry), ccEntryColor, 1);
     }
 
-    fn drawAabb(self: *DrawSystem, aabb: AABB, color: rl.Color, thickness: f32, camera: Camera) void {
-        const p = self.screen.screenPositionV(camera.transformV(aabb.tl));
+    pub fn drawAabb(self: *DrawSystem, aabb: AABB, color: rl.Color, thickness: f32) void {
+        const p = self.screenCoords(aabb.tl);
         rl.drawRectangleLinesEx(
             rl.Rectangle.init(
-                p.x,
-                p.y,
+                V.x(p),
+                V.y(p),
                 aabb.width(),
                 aabb.height(),
             ),
@@ -167,7 +167,7 @@ pub const DrawSystem = struct {
         const bodyA = self.view.getConst(a);
         const bodyB = self.view.getConst(b);
 
-        return bodyA.d.p.y.* < bodyB.d.p.y.*;
+        return bodyA.d.p[1].* < bodyB.d.p[1].*;
     }
 
     fn ensureDrawOrderCapacity(self: *DrawSystem, reg: *ecs.Registry, entity: ecs.Entity) void {
@@ -179,59 +179,130 @@ pub const DrawSystem = struct {
         self.drawOrderList.expandToCapacity();
     }
 
-    fn drawOrder(self: *DrawSystem) []const ecs.Entity {
-        util.sortTo(ecs.Entity, self.view.data(), self.drawOrderList.items[0..self.view.len()], self, minYComparer);
+    fn drawOrderFilterFn(self: *DrawSystem, entity: ecs.Entity) bool {
+        const invisible = self.reg.tryGet(Invisible, entity);
 
-        return self.drawOrderList.items[0..self.view.len()];
+        return invisible == null;
+    }
+
+    fn drawOrder(self: *DrawSystem) []const ecs.Entity {
+        const filtered = util.filterTo(ecs.Entity, self.view.data(), self.drawOrderList.items, self, drawOrderFilterFn);
+        std.mem.sort(ecs.Entity, filtered, self, minYComparer);
+
+        return filtered;
     }
 
     pub fn drawTexture(
         self: DrawSystem,
         texture: *const rl.Texture2D,
-        position: zlm.Vec2,
+        position: Vector,
+        origin: Vector,
         rotation: f32,
         scale: f32,
-        camera: Camera,
+        horizontalFlip: bool,
     ) void {
-        const s = scale * camera.s;
-        const r = rotation + camera.angle();
-        const w = @as(f32, @floatFromInt(texture.width));
-        const h = @as(f32, @floatFromInt(texture.height));
-        const textureSize = zlm.vec2(w, h);
-        const p = position.sub(textureSize.scale(0.5 * scale));
+        const s = scale * self.camera.s;
+        const r = rotation + self.camera.angle();
+        const textureSize = V.fromInt(c_int, texture.width, texture.height);
+        const p = position - textureSize * V.scalar(0.5 * scale);
 
-        const screenP = camera.transformV(self.screen.screenPositionV(p));
-        const screenS = textureSize.scale(s);
+        const screenP = self.camera.transformV(self.screen.screenPositionV(p));
+        const screenS = textureSize * V.scalar(s);
 
-        const source = z2rect(zlm.Vec2.zero, textureSize);
-        const dest = z2rect(screenP, screenS);
-        const origin = zlm.Vec2.zero;
+        const sourceSize = if (horizontalFlip) textureSize * V.init(-1, 1) else textureSize;
+        const source = V.rect(V.zero, sourceSize);
+        const dest = V.rect(screenP, screenS);
 
-        rl.drawTexturePro(texture.*, source, dest, z2r(origin), r, rl.Color.white);
+        var origin_ = V.toRl(origin * V.scalar(scale));
+
+        if (horizontalFlip) {
+            origin_.x = -origin_.x;
+        }
+
+        rl.drawTexturePro(texture.*, source, dest, origin_, r, rl.Color.white);
     }
 
-    pub fn drawShape(self: DrawSystem, rb: *RigidBody, camera: Camera) void {
-        switch (rb.s.shape) {
-            .circle => |circle| self.drawCircle(circle, rb, camera),
-            .rectangle => |rectangle| self.drawRectangle(rectangle, rb, camera),
+    pub fn drawTextureComponent(
+        self: DrawSystem,
+        texture: TextureComponent,
+        body: *RigidBody,
+    ) void {
+        if (texture.sourceRectangle) |sourceRectangle| {
+            self.drawTextureSR(
+                texture.texture,
+                sourceRectangle,
+                texture.origin,
+                body.d.clonePos(),
+                body.d.r.*,
+                body.d.s,
+                texture.horizontalFlip,
+            );
+        } else {
+            self.drawTexture(
+                texture.texture,
+                body.d.clonePos(),
+                texture.origin,
+                body.d.r.*,
+                body.d.s,
+                texture.horizontalFlip,
+            );
         }
     }
 
-    pub fn drawCircle(self: DrawSystem, circle: Circle, rb: *RigidBody, camera: Camera) void {
-        const s = camera.s;
+    /// Draw texture with source rectangle
+    pub fn drawTextureSR(
+        self: DrawSystem,
+        texture: *const rl.Texture2D,
+        source: AABB,
+        origin: Vector,
+        position: Vector,
+        rotation: f32,
+        scale: f32,
+        horizontalFlip: bool,
+    ) void {
+        const s = scale * self.camera.s;
+        const r = rotation + self.camera.angle();
+        const textureSize = source.size();
+        const p = position - textureSize * V.scalar(0.5 * scale);
 
-        const screenP = camera.transformV(self.screen.screenPosition(rb.d.p.x.*, rb.d.p.y.*));
+        const screenP = self.camera.transformV(self.screen.screenPositionV(p));
+        const screenS = textureSize * V.scalar(s);
 
-        rl.drawCircleLinesV(z2r(screenP), circle.radius * s, rl.Color.white);
+        const sourceSize = if (horizontalFlip) textureSize * V.init(-1, 1) else source.size();
+        const sourceR = V.rect(source.tl, sourceSize);
+        const dest = V.rect(screenP, screenS);
+
+        var origin_ = V.toRl(origin * V.scalar(scale));
+
+        if (horizontalFlip) {
+            origin_.x = -origin_.x;
+        }
+
+        rl.drawTexturePro(texture.*, sourceR, dest, origin_, r, rl.Color.white);
     }
 
-    pub fn drawRectangle(self: DrawSystem, _: Rectangle, rb: *RigidBody, camera: Camera) void {
+    pub fn drawShape(self: *DrawSystem, rb: *RigidBody) void {
+        switch (rb.s.shape) {
+            .circle => |circle| self.drawCircle(circle, rb),
+            .rectangle => |rectangle| self.drawRectangle(rectangle, rb),
+        }
+    }
+
+    pub fn drawCircle(self: *DrawSystem, circle: Circle, rb: *RigidBody) void {
+        const s = self.camera.s;
+        const center = rb.aabb.center();
+        const screenP = self.screenCoords(center);
+
+        rl.drawCircleLinesV(V.toRl(screenP), circle.radius * s, rl.Color.white);
+    }
+
+    pub fn drawRectangle(self: *DrawSystem, _: Rectangle, rb: *RigidBody) void {
         var transformedVertices: [5]rl.Vector2 = .{
-            vector.z2r(self.screen.screenPositionV(camera.transformV(rb.aabb.tl))),
-            vector.z2r(self.screen.screenPositionV(camera.transformV(rb.aabb.tr()))),
-            vector.z2r(self.screen.screenPositionV(camera.transformV(rb.aabb.br))),
-            vector.z2r(self.screen.screenPositionV(camera.transformV(rb.aabb.bl()))),
-            vector.z2r(self.screen.screenPositionV(camera.transformV(rb.aabb.tl))),
+            V.toRl(self.screenCoords(rb.aabb.tl)),
+            V.toRl(self.screenCoords(rb.aabb.tr())),
+            V.toRl(self.screenCoords(rb.aabb.br)),
+            V.toRl(self.screenCoords(rb.aabb.bl())),
+            V.toRl(self.screenCoords(rb.aabb.tl)),
         };
 
         const color = if (ccAlgorithm == .quadTree)
@@ -242,14 +313,15 @@ pub const DrawSystem = struct {
         rl.drawLineStrip(&transformedVertices, color);
     }
 
-    fn drawDebugBorder(self: DrawSystem, camera: Camera) void {
+    fn drawDebugBorder(self: DrawSystem) void {
         const lw = 4;
-        const lo = lw / 2;
-        const tl = self.screen.screenPositionV(camera.transformV(-lo, -lo));
-        const br = self.screen.screenPositionV(camera.transformV(self.screen.size.w + lo, self.screen.size.h + lo));
+        const lo = V.all(lw / 2);
 
-        const bl = rl.Vector2.init(tl.x, br.y);
-        const tr = rl.Vector2.init(br.x, tl.y);
+        const tl = V.toRl(self.screenCoords(-lo));
+        const br = V.toRl(self.screenCoords(self.screen.size + lo));
+
+        const bl = rl.Vector2.init(V.x(tl), V.y(br));
+        const tr = rl.Vector2.init(V.x(br), V.y(tl));
 
         rl.drawLineEx(tl, bl, lw, rl.Color.red);
         rl.drawLineEx(tl, tr, lw, rl.Color.red);

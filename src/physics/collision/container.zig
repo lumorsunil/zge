@@ -9,6 +9,7 @@ const Entry = @import("r-tree.zig").Entry;
 const ecs = @import("ecs");
 const RigidBody = @import("../rigid-body-flat.zig").RigidBodyFlat;
 const AABB = @import("../shape.zig").AABB;
+const Circle = @import("../shape.zig").Circle;
 const Collision = @import("result.zig").Collision;
 const Intersection = @import("intersection.zig").Intersection;
 
@@ -126,6 +127,70 @@ pub const CollisionContainer = struct {
         }
     }
 
+    /// Result is owned by caller
+    pub fn intersectingBody(
+        self: *CollisionContainer,
+        body: RigidBody,
+    ) []Intersection(*EntryType) {
+        var result = ArrayList(Intersection(*EntryType)).init(self.allocator);
+
+        const intersections = if (ccAlgorithm == .rTree)
+            self.tree.intersecting(body.aabb, 0)
+        else
+            self.tree.intersecting(body.aabb);
+
+        for (intersections) |intersection| {
+            // TODO: Use real collision detection here (right now just using potentially non-minimal AABBs)
+            result.append(intersection) catch unreachable;
+        }
+
+        return result.toOwnedSlice() catch unreachable;
+    }
+
+    /// Result is owned by caller
+    pub fn intersectingAABB(
+        self: *CollisionContainer,
+        aabb: AABB,
+    ) []Intersection(*EntryType) {
+        var result = ArrayList(Intersection(*EntryType)).init(self.allocator);
+
+        const intersections = if (ccAlgorithm == .rTree)
+            self.tree.intersecting(aabb, 0)
+        else
+            self.tree.intersecting(aabb);
+
+        for (intersections) |intersection| {
+            // TODO: Use real collision detection here (right now just using potentially non-minimal AABBs)
+            result.append(intersection) catch unreachable;
+        }
+
+        return result.toOwnedSlice() catch unreachable;
+    }
+
+    /// Result is owned by caller
+    pub fn intersectingCircle(
+        self: *CollisionContainer,
+        circle: Circle,
+    ) []Intersection(*EntryType) {
+        const aabb = circle.aabb();
+        var result = ArrayList(Intersection(*EntryType)).init(self.allocator);
+
+        const intersections = if (ccAlgorithm == .rTree)
+            self.tree.intersecting(aabb, 0)
+        else
+            self.tree.intersecting(aabb);
+
+        for (intersections) |intersection| {
+            const d = intersection.entry.aabb.distance(aabb);
+            if (d < circle.radius + intersection.entry.aabb.width()) {
+                // TODO: Recalculate the intersection based on circle here, or just use the SAT collision detection already implemented
+                result.append(intersection) catch unreachable;
+            }
+        }
+
+        return result.toOwnedSlice() catch unreachable;
+    }
+
     pub fn checkCollisionsQT(self: *CollisionContainer, boundary: AABB) []Collision {
         self.collisions.resize(0) catch unreachable;
         self.tree.populateAndIntersect(boundary, self.view.raw(), self, intersectionHandler);
@@ -141,6 +206,10 @@ pub const CollisionContainer = struct {
             const other = intersection.entry;
 
             if (body.s.isStatic and other.s.isStatic) {
+                continue;
+            }
+
+            if (!body.s.isSolid or !other.s.isSolid) {
                 continue;
             }
 

@@ -1,11 +1,12 @@
 const std = @import("std");
 const rl = @import("raylib");
 const ecs = @import("ecs");
-const zlm = @import("zlm");
 const ztracy = @import("ztracy");
 
 const DebugScene = @import("debug.zig").DebugScene;
 const RigidBody = @import("physics/rigid-body-flat.zig").RigidBodyFlat;
+
+const V = @import("vector.zig").V;
 
 const cfg = @import("config.zig");
 
@@ -24,15 +25,16 @@ pub fn main() !void {
     defer scene.deinit();
     scene.bind();
 
-    scene.addPlayer(scene.randomPos(), zlm.vec2(10, 10));
+    scene.addPlayer(scene.randomPos(), V.init(10, 10));
 
     scene.addRectangle(
-        zlm.vec2(0, 100),
-        zlm.vec2(cfg.size.x * 0.7, 40),
+        V.init(0, 100),
+        V.init(V.x(cfg.size) * 0.7, 40),
         true,
     );
 
-    rl.initWindow(cfg.size.x, cfg.size.y, "Zig Game Engine Test");
+    const sizeInt = V.toInt(i32, cfg.size);
+    rl.initWindow(sizeInt[0], sizeInt[1], "Zig Game Engine Test");
     rl.setWindowPosition(5, 5);
 
     var lastSample: f64 = 0;

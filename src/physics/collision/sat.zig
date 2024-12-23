@@ -1,6 +1,8 @@
 const std = @import("std");
-const zlm = @import("zlm");
 const ztracy = @import("ztracy");
+
+const V = @import("../../vector.zig").V;
+const Vector = @import("../../vector.zig").Vector;
 
 const RigidBody = @import("../rigid-body-flat.zig").RigidBodyFlat;
 const CollisionResult = @import("result.zig").CollisionResult;
@@ -25,7 +27,7 @@ pub fn checkCollisionShapes(bodyA: *RigidBody, bodyB: *RigidBody) CollisionResul
     defer zone.End();
 
     var minDepth = std.math.inf(f32);
-    var minAxis = zlm.vec2(std.math.inf(f32), std.math.inf(f32));
+    var minAxis = V.init(std.math.inf(f32), std.math.inf(f32));
 
     if (!testCollision(bodyA, bodyB, &minDepth, &minAxis)) {
         return .noCollision;
@@ -35,10 +37,10 @@ pub fn checkCollisionShapes(bodyA: *RigidBody, bodyB: *RigidBody) CollisionResul
         return .noCollision;
     }
 
-    const direction = bodyB.d.clonePos().sub(bodyA.d.clonePos());
+    const direction = bodyB.d.clonePos() - bodyA.d.clonePos();
 
-    if (direction.dot(minAxis) < 0) {
-        minAxis = minAxis.neg();
+    if (V.dot(direction, minAxis) < 0) {
+        minAxis = -minAxis;
     }
 
     return CollisionResult{ .collision = .{
@@ -52,7 +54,7 @@ pub fn checkCollisionShapes(bodyA: *RigidBody, bodyB: *RigidBody) CollisionResul
     } };
 }
 
-fn project(axis: zlm.Vec2, bodyA: *const RigidBody, bodyB: *const RigidBody) MinMaxProjections {
+fn project(axis: Vector, bodyA: *const RigidBody, bodyB: *const RigidBody) MinMaxProjections {
     var minA = std.math.inf(f32);
     var maxA = -std.math.inf(f32);
     var minB = std.math.inf(f32);
@@ -64,7 +66,7 @@ fn project(axis: zlm.Vec2, bodyA: *const RigidBody, bodyB: *const RigidBody) Min
     return MinMaxProjections{ .maxA = maxA, .minA = minA, .maxB = maxB, .minB = minB };
 }
 
-fn projectShape(axis: zlm.Vec2, body: *const RigidBody, max: *f32, min: *f32) void {
+fn projectShape(axis: Vector, body: *const RigidBody, max: *f32, min: *f32) void {
     const v = body.transformedVertices();
 
     switch (body.s.shape) {
@@ -79,31 +81,31 @@ fn projectShape(axis: zlm.Vec2, body: *const RigidBody, max: *f32, min: *f32) vo
     }
 }
 
-fn projectPolygon(axis: zlm.Vec2, v: []const zlm.Vec2, max: *f32, min: *f32) void {
+fn projectPolygon(axis: Vector, v: []const Vector, max: *f32, min: *f32) void {
     for (0..v.len) |i| {
-        const proj = v[i].dot(axis);
+        const proj = V.dot(v[i], axis);
 
         max.* = @max(max.*, proj);
         min.* = @min(min.*, proj);
     }
 }
 
-fn projectCircle(axis: zlm.Vec2, center: zlm.Vec2, radius: f32, max: *f32, min: *f32) void {
-    const direction = axis.normalize();
-    const directionAndRadius = direction.scale(radius);
+fn projectCircle(axis: Vector, center: Vector, radius: f32, max: *f32, min: *f32) void {
+    const direction = V.normalize(axis);
+    const directionAndRadius = direction * V.scalar(radius);
 
-    const v0 = center.add(directionAndRadius);
-    const v1 = center.sub(directionAndRadius);
+    const v0 = center + directionAndRadius;
+    const v1 = center - directionAndRadius;
 
-    const proj0 = v0.dot(axis);
-    const proj1 = v1.dot(axis);
+    const proj0 = V.dot(v0, axis);
+    const proj1 = V.dot(v1, axis);
 
     min.* = @min(proj0, proj1);
     max.* = @max(proj0, proj1);
 }
 
 const MAX_AXIS = 4;
-fn getTestAxis(bodyA: *const RigidBody, bodyB: *const RigidBody, buffer: *[MAX_AXIS]zlm.Vec2) []zlm.Vec2 {
+fn getTestAxis(bodyA: *const RigidBody, bodyB: *const RigidBody, buffer: *[MAX_AXIS]Vector) []Vector {
     const v = bodyA.transformedVertices();
     const other = bodyB.transformedVertices();
 
@@ -113,15 +115,15 @@ fn getTestAxis(bodyA: *const RigidBody, bodyB: *const RigidBody, buffer: *[MAX_A
     };
 }
 
-fn getTestAxisCircle(v: []const zlm.Vec2, other: []const zlm.Vec2, buffer: *[MAX_AXIS]zlm.Vec2) []zlm.Vec2 {
+fn getTestAxisCircle(v: []const Vector, other: []const Vector, buffer: *[MAX_AXIS]Vector) []Vector {
     std.debug.assert(v.len == 1);
 
     const c = v[0];
     var minDistance = std.math.inf(f32);
-    var minDistanceVertex: zlm.Vec2 = zlm.Vec2.zero;
+    var minDistanceVertex: Vector = V.zero;
 
     for (0..other.len) |i| {
-        const distance = other[i].distance2(c);
+        const distance = V.distance2(other[i], c);
 
         if (distance < minDistance) {
             minDistance = distance;
@@ -129,19 +131,19 @@ fn getTestAxisCircle(v: []const zlm.Vec2, other: []const zlm.Vec2, buffer: *[MAX
         }
     }
 
-    const axis = minDistanceVertex.sub(c).normalize();
+    const axis = V.normalize(minDistanceVertex - c);
     buffer[0] = axis;
 
     return buffer[0..1];
 }
 
-fn getTestAxisPolygon(v: []const zlm.Vec2, buffer: *[MAX_AXIS]zlm.Vec2) []zlm.Vec2 {
+fn getTestAxisPolygon(v: []const Vector, buffer: *[MAX_AXIS]Vector) []Vector {
     for (0..v.len) |i| {
         const v0 = v[i];
         const v1 = v[@mod(i + 1, v.len)];
 
-        const edge = v1.sub(v0);
-        const axis = zlm.vec2(-edge.y, edge.x).normalize();
+        const edge = v1 - v0;
+        const axis = V.normalize(V.init(-V.y(edge), V.x(edge)));
 
         buffer[i] = axis;
     }
@@ -149,8 +151,8 @@ fn getTestAxisPolygon(v: []const zlm.Vec2, buffer: *[MAX_AXIS]zlm.Vec2) []zlm.Ve
     return buffer[0..v.len];
 }
 
-fn testCollision(bodyA: *const RigidBody, bodyB: *const RigidBody, minDepth: *f32, minAxis: *zlm.Vec2) bool {
-    var axisBuffer: [MAX_AXIS]zlm.Vec2 = undefined;
+fn testCollision(bodyA: *const RigidBody, bodyB: *const RigidBody, minDepth: *f32, minAxis: *Vector) bool {
+    var axisBuffer: [MAX_AXIS]Vector = undefined;
 
     const axii = getTestAxis(bodyA, bodyB, &axisBuffer);
 

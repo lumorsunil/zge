@@ -25,10 +25,10 @@
     .dependencies = .{
         .@"raylib-zig" = .{
             .url = "https://github.com/Not-Nik/raylib-zig/archive/devel.tar.gz",
-            .hash = "12202f8c415153088be8df39a51e0a4c9d402afd403422a0dcc9afdd417e437a6fdb",
+            .hash = "122058d3ea6318efb819d0bffba630afd1a459fa3a99b4bfe4b680a937d5de04d2fc",
         },
         .entt = .{
-            .url = "https://github.com/prime31/zig-ecs/archive/refs/heads/master.zip",
+            .url = "https://github.com/prime31/zig-ecs/archive/d3ae70ef6185b2e0269d62a57608bfce2567c102.zip",
             .hash = "1220949709178b133c4d7f6ddf87fa575a9f2e9afe545a39aafdc8c89e6abbe83412",
         },
         .zlm = .{

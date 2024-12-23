@@ -1,7 +1,6 @@
-const zlm = @import("zlm");
+const V = @import("vector.zig").V;
 
-pub const size = zlm.vec2(1024, 1024);
-pub const sizeHalfW = size.x / 2;
-pub const sizeHalfH = size.y / 2;
+pub const size = V.init(1024, 1024);
+pub const sizeHalf = size / V.scalar(2);
 
 pub const MAX_ENTITIES = 10000;

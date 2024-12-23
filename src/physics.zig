@@ -3,19 +3,23 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const rl = @import("raylib");
 const ecs = @import("ecs");
-const zlm = @import("zlm");
 const ztracy = @import("ztracy");
 
 const cfg = @import("config.zig");
+
+const V = @import("vector.zig").V;
+const Vector = @import("vector.zig").Vector;
 
 pub const RigidBody = @import("physics/rigid-body-flat.zig").RigidBodyFlat;
 const RigidBodyStaticParams = @import("physics/rigid-body-static.zig").RigidBodyStaticParams;
 const RigidBodyDynamicParams = @import("physics/rigid-body-dynamic.zig").RigidBodyDynamicParams;
 const RigidBodyContainer = @import("physics/rigid-body-container.zig").RigidBodyContainer;
-const Collision = @import("physics/collision/result.zig").Collision;
+pub const Collision = @import("physics/collision/result.zig").Collision;
 const CollisionContainer = @import("physics/collision/container.zig").CollisionContainer;
+const Intersection = @import("physics/collision/intersection.zig").Intersection;
 const resolveCollision = @import("physics/collision.zig").resolveCollision;
 const AABB = @import("physics/shape.zig").AABB;
+const Circle = @import("physics/shape.zig").Circle;
 pub const Densities = @import("physics/rigid-body-static.zig").Densities;
 
 pub const shape = @import("physics/shape.zig");
@@ -23,16 +27,13 @@ pub const shape = @import("physics/shape.zig");
 const sweep = @import("physics/collision/sweep.zig").sweep;
 const SweepLine = @import("physics/collision/sweep.zig").SweepLine;
 
-pub const CollisionEvent = struct {
-    entityA: ecs.Entity,
-    entityB: ecs.Entity,
-    collision: Collision,
-};
+pub const GRAVITY_EARTH = 9.81;
 
 const MAX_COLLISION_EVENTS = 10000;
 const PHYSICS_SUB_STEPS = 8;
 
 const CollisionType = enum {
+    none,
     rTree,
     quadTree,
     sweep,
@@ -43,8 +44,9 @@ const collisionType: CollisionType = .quadTree;
 
 pub const PhysicsSystem = struct {
     pendingCollisions: [MAX_COLLISION_EVENTS]Collision = undefined,
-    collisionEvents: [MAX_COLLISION_EVENTS]CollisionEvent = undefined,
-    gravity: zlm.Vec2,
+    collisionEvents: [MAX_COLLISION_EVENTS]Collision = undefined,
+    gravity: Vector,
+    groundFriction: f32,
 
     view: ecs.BasicView(RigidBody),
 
@@ -67,8 +69,8 @@ pub const PhysicsSystem = struct {
         const ccPtr = reg.get(CollisionContainer, cce);
 
         return PhysicsSystem{
-            //.gravity = zlm.vec2(0, 9.8),
-            .gravity = zlm.vec2(0, 0),
+            .gravity = V.init(0, 0),
+            .groundFriction = 0.9,
             .view = reg.basicView(RigidBody),
             .reg = reg,
             .bodyContainer = RigidBodyContainer.init(allocator),
@@ -99,14 +101,17 @@ pub const PhysicsSystem = struct {
 
         const intervalTimeStep = dt / PHYSICS_SUB_STEPS;
 
+        self.updatePrevAccelerations();
+
+        self.bodyContainer.startPhysicsFrame(self.gravity);
+
         for (0..PHYSICS_SUB_STEPS) |_| {
             self.updatePositions(intervalTimeStep);
             self.updateCollisions();
-            //std.log.info("PENDINGCOLLISIONS: {}", .{numberOfPendingCollisions});
             self.resolveCollisions();
         }
 
-        //std.log.info("BODIES: {}", .{self.view.len()});
+        self.bodyContainer.endPhysicsFrame();
     }
 
     pub fn updateDynamicSubSteps(self: *PhysicsSystem, dt: f32, maxTimeStep: f32) void {
@@ -121,8 +126,11 @@ pub const PhysicsSystem = struct {
             const actualTimeStep = @min(timeLeft, timeStep);
             timeLeft -= timeStep;
             self.updatePositions(actualTimeStep);
-            self.updateCollisions();
-            self.resolveCollisions();
+
+            if (collisionType != .none) {
+                self.updateCollisions();
+                self.resolveCollisions();
+            }
         }
     }
 
@@ -130,7 +138,7 @@ pub const PhysicsSystem = struct {
         const zone = ztracy.ZoneNC(@src(), "update positions", 0xff_00_00_00);
         defer zone.End();
 
-        self.bodyContainer.updatePositions(self.gravity, dt);
+        self.bodyContainer.updatePositions(dt);
 
         //self.removeFarBodies();
 
@@ -148,19 +156,9 @@ pub const PhysicsSystem = struct {
         }
     }
 
-    fn updatePositions0(self: PhysicsSystem, dt: f32) void {
-        for (self.dynamicView.raw()) |*body| {
-            body.a = body.a.add(self.gravity);
-
-            body.v = body.v.add(body.a.scale(dt));
-            body.p = body.p.add(body.v.scale(dt));
-
-            body.rv += body.ra * dt;
-            body.r += body.rv * dt;
-
-            body.a = zlm.vec2(0, 0);
-
-            body.updateTransform();
+    fn updatePrevAccelerations(self: *PhysicsSystem) void {
+        for (self.view.raw()) |*body| {
+            body.d.pa = body.d.cloneAccel();
         }
     }
 
@@ -205,6 +203,7 @@ pub const PhysicsSystem = struct {
         zone.Value(bodies.len);
 
         switch (collisionType) {
+            .none => {},
             .bruteForce => self.updateCollisionsBruteForce(),
             .rTree => self.updateCollisionsWithContainer(),
             .sweep => self.updateCollisionSweep(),
@@ -226,6 +225,7 @@ pub const PhysicsSystem = struct {
         const collisions = self.collisionContainer.checkCollisionsQT(self.boundary);
 
         for (collisions) |collision| {
+            self.emitCollisionEvent(collision);
             self.emitPendingCollision(collision);
         }
     }
@@ -272,18 +272,17 @@ pub const PhysicsSystem = struct {
         for (0.., bodies[0 .. bodies.len - 1]) |iA, *bodyA| {
             if (bodyA.s.isStatic) continue;
 
-            for (iA + 1.., bodies[iA + 1 .. bodies.len]) |iB, *bodyB| {
-                _ = iB; // autofix
+            for (bodies[iA + 1 .. bodies.len]) |*bodyB| {
                 const result = bodyA.checkCollision(bodyB);
 
                 switch (result) {
                     .collision => |collision| {
                         //                        const event = CollisionEvent{
-                        //                            .entityA = self.view.data()[iA],
-                        //                            .entityB = self.view.data()[iB],
+                        //                            .entityA = bodyA.key,
+                        //                            .entityB = bodyB.key,
                         //                            .collision = collision,
                         //                        };
-                        //                        self.emitCollisionEvent(event);
+                        //                        self.emitCollisionEvent(collision);
                         self.emitPendingCollision(collision);
                     },
                     .noCollision => continue,
@@ -308,12 +307,17 @@ pub const PhysicsSystem = struct {
         numberOfPendingCollisions += 1;
     }
 
-    fn emitCollisionEvent(self: *PhysicsSystem, event: CollisionEvent) void {
+    fn emitCollisionEvent(self: *PhysicsSystem, event: Collision) void {
         self.collisionEvents[numberOfCollisionEvents] = event;
         numberOfCollisionEvents += 1;
     }
 
-    pub fn pollCollisions(self: PhysicsSystem, comptime T: type, context: T, onEvent: fn (context: T, collisionEvent: CollisionEvent) void) void {
+    pub fn pollCollisions(
+        self: PhysicsSystem,
+        comptime T: type,
+        context: T,
+        onEvent: fn (context: T, collisionEvent: Collision) void,
+    ) void {
         for (0..numberOfCollisionEvents) |i| {
             onEvent(context, self.collisionEvents[i]);
         }
@@ -321,8 +325,36 @@ pub const PhysicsSystem = struct {
         numberOfCollisionEvents = 0;
     }
 
+    /// Result is owned by caller
+    pub fn findIntersectionsBody(
+        self: PhysicsSystem,
+        body: *RigidBody,
+    ) []Intersection(*RigidBody) {
+        return self.collisionContainer.intersectingBody(body.*);
+    }
+
+    /// Result is owned by caller
+    pub fn findIntersectionsRect(
+        self: PhysicsSystem,
+        rect: AABB,
+    ) []Intersection(*RigidBody) {
+        return self.collisionContainer.intersectingAABB(rect);
+    }
+
+    /// Result is owned by caller
+    pub fn findIntersectionsCircle(
+        self: PhysicsSystem,
+        radius: f32,
+        offset: Vector,
+    ) []Intersection(*RigidBody) {
+        var circle = Circle.init(radius);
+        circle.offset = offset;
+        circle.updateTransform(V.zero, 0, 1);
+        return self.collisionContainer.intersectingCircle(circle);
+    }
+
     const AddRigidBodyOptions = struct {
-        pos: zlm.Vec2 = zlm.Vec2.zero,
+        pos: Vector = V.zero,
         scale: f32 = 1,
     };
 
@@ -333,14 +365,13 @@ pub const PhysicsSystem = struct {
         static: RigidBodyStaticParams,
     ) *RigidBody {
         const entityId = self.reg.entityId(entity);
-        //std.log.info("RIGID BODY ADDED {}", .{entityId});
         var isPointersInvalidated: bool = false;
 
         self.bodyContainer.setRigidBody(
             entityId,
             options.pos,
-            zlm.vec2(0, 0),
-            zlm.vec2(0, 0),
+            V.init(0, 0),
+            V.init(0, 0),
             0,
             0,
             0,
@@ -358,6 +389,10 @@ pub const PhysicsSystem = struct {
         self.reg.add(entity, RigidBody.init(entity, static, dynamic));
         const body = self.view.get(entity);
         body.d.s = options.scale;
+
+        if (body.s.isStatic) {
+            body.s.density = std.math.inf(f32);
+        }
 
         if (collisionType == .rTree) {
             self.collisionContainer.insertBody(entity);

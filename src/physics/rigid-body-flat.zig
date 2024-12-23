@@ -1,6 +1,8 @@
-const zlm = @import("zlm");
 const ztracy = @import("ztracy");
 const ecs = @import("ecs");
+
+const V = @import("../vector.zig").V;
+const Vector = @import("../vector.zig").Vector;
 
 const Shape = @import("shape.zig").Shape;
 const AABB = @import("shape.zig").AABB;
@@ -31,19 +33,23 @@ pub const RigidBodyFlat = struct {
         return body;
     }
 
+    pub fn momentum(self: RigidBodyFlat) Vector {
+        return self.d.cloneVel().scale(self.s.mass());
+    }
+
     pub fn aabb(self: RigidBodyFlat) AABB {
-        return self.s.aabb(self.d.r.*).scale(self.d.s).add(.{ .x = self.d.p.x.*, .y = self.d.p.y.* });
+        return self.s.aabb(self.d.r.*).scale(self.d.s).add(V.fromP(self.d.p));
     }
 
     pub fn radius(self: *const RigidBodyFlat) f32 {
         return self.s.radius();
     }
 
-    pub fn vertices(self: *const RigidBodyFlat) []const zlm.Vec2 {
+    pub fn vertices(self: *const RigidBodyFlat) []const Vector {
         return self.s.vertices();
     }
 
-    pub fn transformedVertices(self: *const RigidBodyFlat) []const zlm.Vec2 {
+    pub fn transformedVertices(self: *const RigidBodyFlat) []const Vector {
         return self.s.transformedVertices();
     }
 
@@ -58,23 +64,25 @@ pub const RigidBodyFlat = struct {
         return col.checkCollision(self, other);
     }
 
-    pub fn move(self: *RigidBodyFlat, delta: zlm.Vec2) void {
-        const dest = self.d.p.add(delta);
-        self.d.p.x.* = dest.x;
-        self.d.p.y.* = dest.y;
+    pub fn move(self: *RigidBodyFlat, delta: Vector) void {
+        V.setP(self.d.p, V.fromP(self.d.p) + delta);
         self.updateTransform();
     }
 
-    pub fn moveAbsolute(self: *RigidBodyFlat, delta: zlm.Vec2) void {
-        self.d.p.x.* = delta.x;
-        self.d.p.y.* = delta.y;
+    pub fn moveAbsolute(self: *RigidBodyFlat, pos: Vector) void {
+        V.setP(self.d.p, pos);
         self.updateTransform();
     }
 
-    pub fn applyForce(self: *RigidBodyFlat, force: zlm.Vec2) void {
+    pub fn applyForce(self: *RigidBodyFlat, force: Vector) void {
         const mass = self.s.mass();
-        const acc = force.div(.{ .x = mass, .y = mass });
-        self.d.a.x.* += acc.x;
-        self.d.a.y.* += acc.y;
+        const acc = force / V.scalar(mass);
+        V.setP(self.d.a, V.fromP(self.d.a) + acc);
+    }
+
+    pub fn applyImpulse(self: *RigidBodyFlat, impulse: Vector) void {
+        const mass = self.s.mass();
+        const vel = impulse / V.scalar(mass);
+        V.setP(self.d.v, V.fromP(self.d.v) + vel);
     }
 };

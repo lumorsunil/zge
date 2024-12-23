@@ -1,18 +1,20 @@
 const std = @import("std");
-const zlm = @import("zlm");
 
 const cfg = @import("config.zig");
 
+const V = @import("vector.zig").V;
+const Vector = @import("vector.zig").Vector;
+
 pub const Camera = struct {
-    position: zlm.Vec2,
-    size: zlm.Vec2,
+    position: Vector,
+    size: Vector,
     /// Doesn't work yet
     r: f32,
     s: f32,
 
     pub fn init() Camera {
         return Camera{
-            .position = zlm.vec2(0, 0),
+            .position = V.init(0, 0),
             .size = cfg.size,
             .r = 0,
             .s = 1,
@@ -23,15 +25,15 @@ pub const Camera = struct {
         return self.r * 180 / std.math.pi;
     }
 
-    pub fn transformV(self: Camera, position: zlm.Vec2) zlm.Vec2 {
-        const transformedPosition = self.position.add(position).scale(self.s);
+    pub fn transformV(self: Camera, position: Vector) Vector {
+        const transformedPosition = self.position + position * V.scalar(self.s);
 
         if (self.r == 0) return transformedPosition;
 
         unreachable;
     }
 
-    pub fn transform(self: Camera, x: f32, y: f32) zlm.Vec2 {
-        return self.transformV(zlm.vec2(x, y));
+    pub fn transform(self: Camera, x: f32, y: f32) Vector {
+        return self.transformV(V.init(x, y));
     }
 };

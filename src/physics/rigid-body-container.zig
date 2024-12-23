@@ -6,8 +6,13 @@ const ArrayList = std.ArrayList;
 
 const cfg = @import("../config.zig");
 
+const V = @import("../vector.zig").V;
+const Vector = @import("../vector.zig").Vector;
+const PV = @import("../vector.zig").PV;
+const PVector = @import("../vector.zig").PVector;
+
 const VectorArrayList = @import("vector-array-list.zig").VectorArrayList;
-const Vector = @import("vector-array-list.zig").Vector;
+const VectorArray = @import("vector-array-list.zig").Vector;
 
 const RigidBodyStaticParams = @import("rigid-body-static.zig").RigidBodyStaticParams;
 const RigidBodyDynamicParams = @import("rigid-body-dynamic.zig").RigidBodyDynamicParams;
@@ -149,14 +154,25 @@ pub const RigidBodyContainer = struct {
         self.rigidBodiesRotationalAcceleration.set(i, 0);
     }
 
-    pub fn setRigidBody(self: *RigidBodyContainer, i: usize, pos: zlm.Vec2, vel: zlm.Vec2, acc: zlm.Vec2, r: f32, rv: f32, ra: f32, isStatic: bool, isPointersInvalidated: ?*bool) void {
+    pub fn setRigidBody(
+        self: *RigidBodyContainer,
+        i: usize,
+        pos: Vector,
+        vel: Vector,
+        acc: Vector,
+        r: f32,
+        rv: f32,
+        ra: f32,
+        isStatic: bool,
+        isPointersInvalidated: ?*bool,
+    ) void {
         self.rigidBodiesDynamic.set(i, if (isStatic) 0 else 1, isPointersInvalidated);
-        self.rigidBodiesPositionX.set(i, pos.x, isPointersInvalidated);
-        self.rigidBodiesPositionY.set(i, pos.y, isPointersInvalidated);
-        self.rigidBodiesVelocityX.set(i, vel.x, isPointersInvalidated);
-        self.rigidBodiesVelocityY.set(i, vel.y, isPointersInvalidated);
-        self.rigidBodiesAccelerationX.set(i, acc.x, isPointersInvalidated);
-        self.rigidBodiesAccelerationY.set(i, acc.y, isPointersInvalidated);
+        self.rigidBodiesPositionX.set(i, V.x(pos), isPointersInvalidated);
+        self.rigidBodiesPositionY.set(i, V.y(pos), isPointersInvalidated);
+        self.rigidBodiesVelocityX.set(i, V.x(vel), isPointersInvalidated);
+        self.rigidBodiesVelocityY.set(i, V.y(vel), isPointersInvalidated);
+        self.rigidBodiesAccelerationX.set(i, V.x(acc), isPointersInvalidated);
+        self.rigidBodiesAccelerationY.set(i, V.y(acc), isPointersInvalidated);
         self.rigidBodiesRotation.set(i, r, isPointersInvalidated);
         self.rigidBodiesRotationalVelocity.set(i, rv, isPointersInvalidated);
         self.rigidBodiesRotationalAcceleration.set(i, ra, isPointersInvalidated);
@@ -169,18 +185,18 @@ pub const RigidBodyContainer = struct {
     }
 
     /// Slow operation
-    pub fn getPositionP(self: *RigidBodyContainer, i: usize) pzlm.Vec2 {
-        return pzlm.vec2(self.rigidBodiesPositionX.getP(i), self.rigidBodiesPositionY.getP(i));
+    pub fn getPositionP(self: *RigidBodyContainer, i: usize) PVector {
+        return PV.init(self.rigidBodiesPositionX.getP(i), self.rigidBodiesPositionY.getP(i));
     }
 
     /// Slow operation
-    pub fn getVelocityP(self: *RigidBodyContainer, i: usize) pzlm.Vec2 {
-        return pzlm.vec2(self.rigidBodiesVelocityX.getP(i), self.rigidBodiesVelocityY.getP(i));
+    pub fn getVelocityP(self: *RigidBodyContainer, i: usize) PVector {
+        return PV.init(self.rigidBodiesVelocityX.getP(i), self.rigidBodiesVelocityY.getP(i));
     }
 
     /// Slow operation
-    pub fn getAccelerationP(self: *RigidBodyContainer, i: usize) pzlm.Vec2 {
-        return pzlm.vec2(self.rigidBodiesAccelerationX.getP(i), self.rigidBodiesAccelerationY.getP(i));
+    pub fn getAccelerationP(self: *RigidBodyContainer, i: usize) PVector {
+        return PV.init(self.rigidBodiesAccelerationX.getP(i), self.rigidBodiesAccelerationY.getP(i));
     }
 
     /// Slow operation
@@ -199,33 +215,33 @@ pub const RigidBodyContainer = struct {
     }
 
     /// Slow operation
-    pub fn getPosition(self: *RigidBodyContainer, i: usize) zlm.Vec2 {
-        return zlm.vec2(self.rigidBodiesPositionX.get(i), self.rigidBodiesPositionY.get(i));
+    pub fn getPosition(self: *RigidBodyContainer, i: usize) Vector {
+        return V.init(self.rigidBodiesPositionX.get(i), self.rigidBodiesPositionY.get(i));
     }
 
     /// Slow operation
-    pub fn getVelocity(self: *RigidBodyContainer, i: usize) zlm.Vec2 {
-        return zlm.vec2(self.rigidBodiesVelocityX.get(i), self.rigidBodiesVelocityY.get(i));
+    pub fn getVelocity(self: *RigidBodyContainer, i: usize) Vector {
+        return V.init(self.rigidBodiesVelocityX.get(i), self.rigidBodiesVelocityY.get(i));
     }
 
     /// Slow operation
-    pub fn getAcceleration(self: *RigidBodyContainer, i: usize) zlm.Vec2 {
-        return zlm.vec2(self.rigidBodiesAccelerationX.get(i), self.rigidBodiesAccelerationY.get(i));
+    pub fn getAcceleration(self: *RigidBodyContainer, i: usize) Vector {
+        return V.init(self.rigidBodiesAccelerationX.get(i), self.rigidBodiesAccelerationY.get(i));
     }
 
     /// Slow operation
     pub fn getRotation(self: *RigidBodyContainer, i: usize) f32 {
-        return zlm.vec2(self.rigidBodiesRotation.get(i));
+        return self.rigidBodiesRotation.get(i);
     }
 
     /// Slow operation
     pub fn getRotationalVelocity(self: *RigidBodyContainer, i: usize) f32 {
-        return zlm.vec2(self.rigidBodiesRotationalVelocity.get(i));
+        return self.rigidBodiesRotationalVelocity.get(i);
     }
 
     /// Slow operation
     pub fn getRotationalAcceleration(self: *RigidBodyContainer, i: usize) f32 {
-        return zlm.vec2(self.rigidBodiesRotationalAcceleration.get(i));
+        return self.rigidBodiesRotationalAcceleration.get(i);
     }
 
     /// Very slow operation
@@ -250,8 +266,8 @@ pub const RigidBodyContainer = struct {
         body.ra = self.getRotationalAccelerationP(i);
     }
 
-    fn integrateScaledFn(dt: f32, a: *Vector, b: *Vector) void {
-        const splat = @as(Vector, @splat(dt));
+    fn integrateScaledFn(dt: f32, a: *VectorArray, b: *VectorArray) void {
+        const splat = @as(VectorArray, @splat(dt));
 
         a.* += b.* * splat;
     }
@@ -260,31 +276,35 @@ pub const RigidBodyContainer = struct {
         a.iterateC(f32, b, dt, integrateScaledFn);
     }
 
-    fn applyGravityFn(gravity: *const Vector, acceleration: *Vector, dynamic: *Vector) void {
+    fn applyGravityFn(gravity: *const VectorArray, acceleration: *VectorArray, dynamic: *VectorArray) void {
         acceleration.* += gravity.* * dynamic.*;
     }
 
-    fn applyGravity(self: *RigidBodyContainer, gravity: zlm.Vec2) void {
-        var gravityXVector = @as(Vector, @splat(gravity.x));
+    fn applyGravity(self: *RigidBodyContainer, gravity: Vector) void {
+        var gravityXVector = @as(VectorArray, @splat(gravity[0]));
         self.rigidBodiesAccelerationX.iterateC(
-            *Vector,
+            *VectorArray,
             &self.rigidBodiesDynamic,
             &gravityXVector,
             applyGravityFn,
         );
-        var gravityYVector = @as(Vector, @splat(gravity.y));
+        var gravityYVector = @as(VectorArray, @splat(gravity[1]));
         self.rigidBodiesAccelerationY.iterateC(
-            *Vector,
+            *VectorArray,
             &self.rigidBodiesDynamic,
             &gravityYVector,
             applyGravityFn,
         );
     }
 
-    pub fn updatePositions(self: *RigidBodyContainer, gravity: zlm.Vec2, dt: f32) void {
+    pub fn startPhysicsFrame(self: *RigidBodyContainer, gravity: Vector) void {
         @setRuntimeSafety(false);
 
         self.applyGravity(gravity);
+    }
+
+    pub fn updatePositions(self: *RigidBodyContainer, dt: f32) void {
+        @setRuntimeSafety(false);
 
         integrateScaled(dt, &self.rigidBodiesVelocityX, &self.rigidBodiesAccelerationX);
         integrateScaled(dt, &self.rigidBodiesVelocityY, &self.rigidBodiesAccelerationY);
@@ -294,6 +314,10 @@ pub const RigidBodyContainer = struct {
 
         integrateScaled(dt, &self.rigidBodiesRotationalVelocity, &self.rigidBodiesRotationalAcceleration);
         integrateScaled(dt, &self.rigidBodiesRotation, &self.rigidBodiesRotationalVelocity);
+    }
+
+    pub fn endPhysicsFrame(self: *RigidBodyContainer) void {
+        @setRuntimeSafety(false);
 
         self.rigidBodiesAccelerationX.setScalar(0);
         self.rigidBodiesAccelerationY.setScalar(0);

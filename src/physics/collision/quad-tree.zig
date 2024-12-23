@@ -2,9 +2,11 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const BoundedArray = std.BoundedArray;
-const zlm = @import("zlm");
 
 const ztracy = @import("ztracy");
+
+const V = @import("../../vector.zig").V;
+const Vector = @import("../../vector.zig").Vector;
 
 const AABB = @import("../shape.zig").AABB;
 const Intersection = @import("intersection.zig").Intersection;
@@ -58,28 +60,28 @@ pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
             }
 
             pub fn subdivisions(self: Page) Subdivision(AABB) {
-                const halfSize = self.aabb.size().scale(0.5);
-                const halfX = zlm.vec2(halfSize.x, 0);
-                const halfY = zlm.vec2(0, halfSize.y);
+                const halfSize = self.aabb.size() / V.scalar(2);
+                const halfX = V.onlyX(V.x(halfSize));
+                const halfY = V.onlyY(V.y(halfSize));
 
                 return Subdivision(AABB){
                     .tl = AABB{
                         .tl = self.aabb.tl,
-                        .br = self.aabb.br.sub(halfSize),
+                        .br = self.aabb.br - halfSize,
                         .isMinimal = false,
                     },
                     .tr = AABB{
-                        .tl = self.aabb.tl.add(halfX),
-                        .br = self.aabb.br.sub(halfY),
+                        .tl = self.aabb.tl + halfX,
+                        .br = self.aabb.br - halfY,
                         .isMinimal = false,
                     },
                     .bl = AABB{
-                        .tl = self.aabb.tl.add(halfY),
-                        .br = self.aabb.br.sub(halfX),
+                        .tl = self.aabb.tl + halfY,
+                        .br = self.aabb.br - halfX,
                         .isMinimal = false,
                     },
                     .br = AABB{
-                        .tl = self.aabb.tl.add(halfSize),
+                        .tl = self.aabb.tl + halfSize,
                         .br = self.aabb.br,
                         .isMinimal = false,
                     },
@@ -343,7 +345,7 @@ pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
             const center = aabb.center();
             const pageCenter = page.aabb.center();
 
-            if (center.x < pageCenter.x and center.y < pageCenter.y) {
+            if (V.lessThan(center, pageCenter)) {
                 return 0;
             } else {
                 return 3;
