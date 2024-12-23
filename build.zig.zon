@@ -31,10 +31,6 @@
             .url = "https://github.com/prime31/zig-ecs/archive/d3ae70ef6185b2e0269d62a57608bfce2567c102.zip",
             .hash = "1220949709178b133c4d7f6ddf87fa575a9f2e9afe545a39aafdc8c89e6abbe83412",
         },
-        .zlm = .{
-            .url = "https://github.com/ziglibs/zlm/archive/refs/heads/master.zip",
-            .hash = "1220342ac333965de915f74a8425e4848ffe46852da0e4789103f9ec650c3cd22456",
-        },
         .ztracy = .{ .path = "ztracy" },
     },
     .paths = .{

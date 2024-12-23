@@ -1,6 +1,4 @@
 const std = @import("std");
-const zlm = @import("zlm");
-const pzlm = zlm.SpecializeOn(*f32);
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 

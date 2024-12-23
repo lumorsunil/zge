@@ -1,5 +1,4 @@
 const rl = @import("raylib");
-const zlm = @import("zlm");
 
 const AABB = @import("physics/shape.zig").AABB;
 

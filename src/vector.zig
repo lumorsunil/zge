@@ -1,6 +1,5 @@
 const std = @import("std");
 const rl = @import("raylib");
-const zlm = @import("zlm");
 
 pub fn VectorGeneric(comptime T: type) type {
     return @Vector(2, T);

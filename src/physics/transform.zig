@@ -1,20 +1,21 @@
 const std = @import("std");
-const zlm = @import("zlm");
+
+const Vector = @import("../vector.zig").Vector;
 
 const Shape = @import("shape.zig").Shape;
 
-pub fn transformVertices(shape: Shape, translation: zlm.Vec2, rotation: f32, buffer: []zlm.Vec2) []zlm.Vec2 {
+pub fn transformVertices(shape: Shape, translation: Vector, rotation: f32, buffer: []Vector) []Vector {
     return switch (shape) {
         .rectangle => |rectangle| transformVerticesRectangle(&rectangle.vertices, translation, rotation, buffer),
         .circle => transformVerticesCircle(translation, buffer),
     };
 }
 
-pub fn transformVertex(v: zlm.Vec2, translation: zlm.Vec2, rotation: f32) zlm.Vec2 {
+pub fn transformVertex(v: Vector, translation: Vector, rotation: f32) Vector {
     return v.rotate(rotation).add(translation);
 }
 
-fn transformVerticesRectangle(v: []const zlm.Vec2, translation: zlm.Vec2, rotation: f32, buffer: []zlm.Vec2) []zlm.Vec2 {
+fn transformVerticesRectangle(v: []const Vector, translation: Vector, rotation: f32, buffer: []Vector) []Vector {
     std.debug.assert(v.len <= buffer.len);
 
     for (0..v.len) |i| {
@@ -24,7 +25,7 @@ fn transformVerticesRectangle(v: []const zlm.Vec2, translation: zlm.Vec2, rotati
     return buffer[0..v.len];
 }
 
-fn transformVerticesCircle(translation: zlm.Vec2, buffer: []zlm.Vec2) []zlm.Vec2 {
+fn transformVerticesCircle(translation: Vector, buffer: []Vector) []Vector {
     std.debug.assert(buffer.len > 1);
 
     buffer[0] = translation;

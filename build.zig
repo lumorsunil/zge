@@ -41,11 +41,6 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("ecs", ecs);
     zge.addImport("ecs", ecs);
 
-    const zlm_dep = b.dependency("zlm", .{});
-    const zlm = zlm_dep.module("zlm");
-    exe.root_module.addImport("zlm", zlm);
-    zge.addImport("zlm", zlm);
-
     const ztracy_dep = b.dependency("ztracy", .{
         .enable_ztracy = options.enable_ztracy,
     });

@@ -2,7 +2,6 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const ztracy = @import("ztracy");
-const zlm = @import("zlm");
 const RTree = @import("r-tree.zig").RTree;
 const QuadTree = @import("quad-tree.zig").QuadTree;
 const Entry = @import("r-tree.zig").Entry;
