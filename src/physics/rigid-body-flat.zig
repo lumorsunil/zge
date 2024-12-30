@@ -34,7 +34,7 @@ pub const RigidBodyFlat = struct {
     }
 
     pub fn momentum(self: RigidBodyFlat) Vector {
-        return self.d.cloneVel().scale(self.s.mass());
+        return self.d.cloneVel() * V.scalar(self.s.mass());
     }
 
     pub fn aabb(self: RigidBodyFlat) AABB {

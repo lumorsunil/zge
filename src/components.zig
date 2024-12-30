@@ -20,6 +20,16 @@ pub const TextureComponent = struct {
     }
 };
 
+pub const DrawLayerComponent = struct {
+    z: u32,
+
+    pub fn init(z: u32) DrawLayerComponent {
+        return DrawLayerComponent{
+            .z = z,
+        };
+    }
+};
+
 pub const Invisible = struct {
     isInvisible: bool = true,
 };

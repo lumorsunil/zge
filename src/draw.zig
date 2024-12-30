@@ -16,6 +16,7 @@ const Camera = @import("camera.zig").Camera;
 const Screen = @import("screen.zig").Screen;
 const TextureComponent = @import("components.zig").TextureComponent;
 const Invisible = @import("components.zig").Invisible;
+const DrawLayerComponent = @import("components.zig").DrawLayerComponent;
 
 const V = @import("vector.zig").V;
 const Vector = @import("vector.zig").Vector;
@@ -24,8 +25,10 @@ pub const DrawSystem = struct {
     screen: *const Screen,
     camera: *Camera,
     reg: *ecs.Registry,
-    view: ecs.BasicView(RigidBody),
-    textureView: ecs.MultiView(2, 0),
+    bodyView: ecs.BasicView(RigidBody),
+    layerView: ecs.BasicView(DrawLayerComponent),
+    textureView: ecs.MultiView(3, 0),
+    topLayerView: ecs.MultiView(1, 1),
     shapeView: ecs.MultiView(1, 1),
     ccView: ecs.BasicView(CollisionContainer),
     drawOrderList: ArrayList(ecs.Entity),
@@ -33,14 +36,20 @@ pub const DrawSystem = struct {
 
     var showQTGrid = false;
     var showCollisionBoxes = false;
+    var drawLayersSlowly = false;
+    var layersBeingDrawn: usize = 0;
+    const layerDrawSpeed = 2;
+    var nextLayerDrawnAt: f64 = layerDrawSpeed;
 
     pub fn init(allocator: Allocator, reg: *ecs.Registry, screen: *const Screen, camera: *Camera) DrawSystem {
         return DrawSystem{
             .screen = screen,
             .camera = camera,
             .reg = reg,
-            .view = reg.basicView(RigidBody),
-            .textureView = reg.view(.{ TextureComponent, RigidBody }, .{}),
+            .bodyView = reg.basicView(RigidBody),
+            .layerView = reg.basicView(DrawLayerComponent),
+            .textureView = reg.view(.{ TextureComponent, DrawLayerComponent, RigidBody }, .{}),
+            .topLayerView = reg.view(.{RigidBody}, .{DrawLayerComponent}),
             .shapeView = reg.view(.{RigidBody}, .{TextureComponent}),
             .ccView = reg.basicView(CollisionContainer),
             .drawOrderList = ArrayList(ecs.Entity).initCapacity(allocator, 100) catch unreachable,
@@ -69,8 +78,51 @@ pub const DrawSystem = struct {
             showCollisionBoxes = !showCollisionBoxes;
         }
 
+        if (drawLayersSlowly) {
+            var maxLayer: usize = 0;
+
+            for (self.layerView.raw()) |layer| {
+                if (maxLayer < layer.z) {
+                    maxLayer = layer.z;
+                }
+            }
+
+            if (nextLayerDrawnAt <= rl.getTime()) {
+                layersBeingDrawn += 1;
+
+                if (layersBeingDrawn > maxLayer) {
+                    layersBeingDrawn = 0;
+                }
+
+                nextLayerDrawnAt += layerDrawSpeed;
+            }
+        }
+
         for (self.drawOrder()) |entity| {
-            const body = self.view.get(entity);
+            if (drawLayersSlowly) {
+                const layer = self.reg.get(DrawLayerComponent, entity);
+
+                if (layer.z > layersBeingDrawn) {
+                    continue;
+                }
+            }
+
+            const body = self.bodyView.get(entity);
+            const maybeTexture = self.reg.tryGetConst(TextureComponent, entity);
+
+            if (maybeTexture) |texture| {
+                self.drawTextureComponent(texture, body);
+            }
+
+            if (showCollisionBoxes) {
+                self.drawShape(body);
+            }
+        }
+
+        var it = self.topLayerView.entityIterator();
+
+        while (it.next()) |entity| {
+            const body = self.bodyView.get(entity);
             const maybeTexture = self.reg.tryGetConst(TextureComponent, entity);
 
             if (maybeTexture) |texture| {
@@ -84,6 +136,14 @@ pub const DrawSystem = struct {
 
         if (showQTGrid) {
             self.drawCollisionContainer();
+        }
+
+        if (drawLayersSlowly) {
+            const screen = self.reg.singletons().get(Screen);
+            const pos = V.toRl(screen.sizeHalf);
+            var buffer: [64:0]u8 = undefined;
+            const label = std.fmt.bufPrintZ(&buffer, "Drawing Layer: {d:.0}", .{layersBeingDrawn}) catch unreachable;
+            rl.drawTextPro(rl.getFontDefault(), label, pos, V.toRl(.{ 160, 0 }), 0, 48, 3, rl.Color.white);
         }
     }
 
@@ -164,10 +224,10 @@ pub const DrawSystem = struct {
     }
 
     fn minYComparer(self: *DrawSystem, a: ecs.Entity, b: ecs.Entity) bool {
-        const bodyA = self.view.getConst(a);
-        const bodyB = self.view.getConst(b);
+        const layerA = self.textureView.getConst(DrawLayerComponent, a);
+        const layerB = self.textureView.getConst(DrawLayerComponent, b);
 
-        return bodyA.d.p[1].* < bodyB.d.p[1].*;
+        return layerA.z < layerB.z;
     }
 
     fn ensureDrawOrderCapacity(self: *DrawSystem, reg: *ecs.Registry, entity: ecs.Entity) void {
@@ -175,7 +235,7 @@ pub const DrawSystem = struct {
         _ = reg;
 
         self.drawOrderList.clearRetainingCapacity();
-        self.drawOrderList.ensureTotalCapacity(self.view.len()) catch unreachable;
+        self.drawOrderList.ensureTotalCapacity(self.layerView.len()) catch unreachable;
         self.drawOrderList.expandToCapacity();
     }
 
@@ -186,7 +246,7 @@ pub const DrawSystem = struct {
     }
 
     fn drawOrder(self: *DrawSystem) []const ecs.Entity {
-        const filtered = util.filterTo(ecs.Entity, self.view.data(), self.drawOrderList.items, self, drawOrderFilterFn);
+        const filtered = util.filterTo(ecs.Entity, self.layerView.data(), self.drawOrderList.items, self, drawOrderFilterFn);
         std.mem.sort(ecs.Entity, filtered, self, minYComparer);
 
         return filtered;

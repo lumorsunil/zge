@@ -29,6 +29,14 @@ pub const V = struct {
         return v[1];
     }
 
+    pub fn setX(v: *Vector, x_: f32) void {
+        v.*[0] = x_;
+    }
+
+    pub fn setY(v: *Vector, y_: f32) void {
+        v.*[1] = y_;
+    }
+
     pub fn fromRl(rlVector: rl.Vector2) Vector {
         return fromXYV(rlVector);
     }
