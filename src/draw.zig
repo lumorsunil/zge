@@ -252,85 +252,87 @@ pub const DrawSystem = struct {
         return filtered;
     }
 
-    pub fn drawTexture(
-        self: DrawSystem,
-        texture: *const rl.Texture2D,
-        position: Vector,
-        origin: Vector,
-        rotation: f32,
-        scale: f32,
-        horizontalFlip: bool,
-    ) void {
-        const s = scale * self.camera.s;
-        const r = rotation + self.camera.angle();
-        const textureSize = V.fromInt(c_int, texture.width, texture.height);
-        const p = position - textureSize * V.scalar(0.5 * scale);
-
-        const screenP = self.camera.transformV(self.screen.screenPositionV(p));
-        const screenS = textureSize * V.scalar(s);
-
-        const sourceSize = if (horizontalFlip) textureSize * V.init(-1, 1) else textureSize;
-        const source = V.rect(V.zero, sourceSize);
-        const dest = V.rect(screenP, screenS);
-
-        var origin_ = V.toRl(origin * V.scalar(scale));
-
-        if (horizontalFlip) {
-            origin_.x = -origin_.x;
-        }
-
-        rl.drawTexturePro(texture.*, source, dest, origin_, r, rl.Color.white);
-    }
-
     pub fn drawTextureComponent(
         self: DrawSystem,
         texture: TextureComponent,
         body: *RigidBody,
     ) void {
-        if (texture.sourceRectangle) |sourceRectangle| {
-            self.drawTextureSR(
-                texture.texture,
-                sourceRectangle,
-                texture.origin,
-                body.d.clonePos(),
-                body.d.r.*,
-                body.d.s,
-                texture.horizontalFlip,
-            );
-        } else {
-            self.drawTexture(
-                texture.texture,
-                body.d.clonePos(),
-                texture.origin,
-                body.d.r.*,
-                body.d.s,
-                texture.horizontalFlip,
-            );
-        }
+        self.drawTextureComponentC(texture, body.d.clonePos(), body.d.r.*, body.d.s);
+    }
+
+    pub fn drawTextureComponentC(
+        self: DrawSystem,
+        texture: TextureComponent,
+        position: Vector,
+        rotation: f32,
+        scale: f32,
+    ) void {
+        self.drawTextureSRWithCamera(
+            texture.texture,
+            texture.sourceRectangle,
+            texture.origin,
+            position,
+            rotation,
+            scale,
+            texture.horizontalFlip,
+        );
+    }
+
+    pub fn drawTextureComponentCUI(
+        self: DrawSystem,
+        texture: TextureComponent,
+        position: Vector,
+        rotation: f32,
+        scale: f32,
+    ) void {
+        self.drawTextureSR(
+            texture.texture,
+            texture.sourceRectangle,
+            texture.origin,
+            position,
+            rotation,
+            scale,
+            texture.horizontalFlip,
+        );
+    }
+
+    /// Draw texture with source rectangle
+    pub fn drawTextureSRWithCamera(
+        self: DrawSystem,
+        texture: *const rl.Texture2D,
+        source: ?AABB,
+        origin: Vector,
+        position: Vector,
+        rotation: f32,
+        scale: f32,
+        horizontalFlip: bool,
+    ) void {
+        const screenP = self.camera.transformV(position);
+        self.drawTextureSR(texture, source, origin, screenP, rotation, scale, horizontalFlip);
     }
 
     /// Draw texture with source rectangle
     pub fn drawTextureSR(
         self: DrawSystem,
         texture: *const rl.Texture2D,
-        source: AABB,
+        source: ?AABB,
         origin: Vector,
         position: Vector,
         rotation: f32,
         scale: f32,
         horizontalFlip: bool,
     ) void {
-        const s = scale * self.camera.s;
         const r = rotation + self.camera.angle();
-        const textureSize = source.size();
+        const sourceOffset = if (source) |s| s.tl else V.zero;
+        const textureSize = if (source) |s| s.size() else V.fromInt(c_int, texture.width, texture.height);
         const p = position - textureSize * V.scalar(0.5 * scale);
+        const screenP = self.screen.screenPositionV(p);
 
-        const screenP = self.camera.transformV(self.screen.screenPositionV(p));
-        const screenS = textureSize * V.scalar(s);
+        const scaledTextureSize = textureSize * V.scalar(scale);
 
-        const sourceSize = if (horizontalFlip) textureSize * V.init(-1, 1) else source.size();
-        const sourceR = V.rect(source.tl, sourceSize);
-        const dest = V.rect(screenP, screenS);
+        const sourceSize = if (horizontalFlip) textureSize * V.init(-1, 1) else textureSize;
+        const sourceR = V.rect(sourceOffset, sourceSize);
+        const dest = V.rect(screenP, scaledTextureSize);
 
         var origin_ = V.toRl(origin * V.scalar(scale));
 
