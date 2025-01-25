@@ -178,6 +178,22 @@ pub const AABB = struct {
         return V.init(V.x(self.br), self.centerY());
     }
 
+    pub fn left(self: AABB) f32 {
+        return V.x(self.tl);
+    }
+
+    pub fn right(self: AABB) f32 {
+        return V.x(self.br);
+    }
+
+    pub fn top(self: AABB) f32 {
+        return V.y(self.tl);
+    }
+
+    pub fn bottom(self: AABB) f32 {
+        return V.y(self.br);
+    }
+
     pub fn distance(self: AABB, other: AABB) f32 {
         return V.distance(self.center(), other.center());
     }
