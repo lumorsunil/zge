@@ -1,5 +1,5 @@
 .{
-    .name = "zig-game-engine",
+    .name = "zge",
     .version = "0.0.0",
     .dependencies = .{
         .@"raylib-zig" = .{
