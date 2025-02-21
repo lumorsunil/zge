@@ -205,20 +205,20 @@ pub const DebugScene = struct {
         var force = V.zero;
         const speed = 1000;
 
-        if (rl.isKeyDown(rl.KeyboardKey.key_a)) {
+        if (rl.isKeyDown(rl.KeyboardKey.a)) {
             force -= V.onlyX(speed);
         }
-        if (rl.isKeyDown(rl.KeyboardKey.key_d)) {
+        if (rl.isKeyDown(rl.KeyboardKey.d)) {
             force += V.onlyX(speed);
         }
-        if (rl.isKeyDown(rl.KeyboardKey.key_w)) {
+        if (rl.isKeyDown(rl.KeyboardKey.w)) {
             force -= V.onlyY(speed);
         }
-        if (rl.isKeyDown(rl.KeyboardKey.key_s)) {
+        if (rl.isKeyDown(rl.KeyboardKey.s)) {
             force += V.onlyY(speed);
         }
 
-        if (rl.isMouseButtonPressed(rl.MouseButton.mouse_button_left)) {
+        if (rl.isMouseButtonPressed(rl.MouseButton.left)) {
             for (0..1) |_| {
                 self.addRectangle(
                     V.fromRl(rl.getMousePosition()) - cfg.sizeHalf,

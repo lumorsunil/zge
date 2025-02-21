@@ -71,10 +71,10 @@ pub const DrawSystem = struct {
     }
 
     pub fn draw(self: *DrawSystem) void {
-        if (rl.isKeyPressed(rl.KeyboardKey.key_q)) {
+        if (rl.isKeyPressed(rl.KeyboardKey.q)) {
             showQTGrid = !showQTGrid;
         }
-        if (rl.isKeyPressed(rl.KeyboardKey.key_c)) {
+        if (rl.isKeyPressed(rl.KeyboardKey.c)) {
             showCollisionBoxes = !showCollisionBoxes;
         }
 
@@ -143,7 +143,7 @@ pub const DrawSystem = struct {
             const pos = V.toRl(screen.sizeHalf);
             var buffer: [64:0]u8 = undefined;
             const label = std.fmt.bufPrintZ(&buffer, "Drawing Layer: {d:.0}", .{layersBeingDrawn}) catch unreachable;
-            rl.drawTextPro(rl.getFontDefault(), label, pos, V.toRl(.{ 160, 0 }), 0, 48, 3, rl.Color.white);
+            rl.drawTextPro(rl.getFontDefault() catch unreachable, label, pos, V.toRl(.{ 160, 0 }), 0, 48, 3, rl.Color.white);
         }
     }
 
