@@ -1,4 +1,4 @@
-const ztracy = @import("ztracy");
+// const ztracy = @import("ztracy");
 const ecs = @import("ecs");
 
 const V = @import("../vector.zig").V;
@@ -59,8 +59,8 @@ pub const RigidBodyFlat = struct {
     }
 
     pub fn checkCollision(self: *RigidBodyFlat, other: *RigidBodyFlat) CollisionResult {
-        const zone = ztracy.ZoneNC(@src(), "check collision", 0x00_ff_ff_00);
-        defer zone.End();
+        // const zone = ztracy.ZoneNC(@src(), "check collision", 0x00_ff_ff_00);
+        // defer zone.End();
         return col.checkCollision(self, other);
     }
 

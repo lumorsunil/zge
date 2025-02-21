@@ -1,7 +1,7 @@
 const std = @import("std");
 const rl = @import("raylib");
 const ecs = @import("ecs");
-const ztracy = @import("ztracy");
+// const ztracy = @import("ztracy");
 
 const DebugScene = @import("debug.zig").DebugScene;
 const RigidBody = @import("physics/rigid-body-flat.zig").RigidBodyFlat;
@@ -11,8 +11,8 @@ const V = @import("vector.zig").V;
 const cfg = @import("config.zig");
 
 pub fn main() !void {
-    const zone = ztracy.ZoneN(@src(), "main");
-    defer zone.End();
+    // const zone = ztracy.ZoneN(@src(), "main");
+    // defer zone.End();
 
     var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = true }){};
     defer _ = gpa.deinit();

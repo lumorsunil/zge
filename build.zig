@@ -1,12 +1,11 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    const options = .{
-        .enable_ztracy = b.option(bool, "enable_ztracy", "Enable Tracy profile markers") orelse false,
-    };
+    // const options = .{
+    //     .enable_ztracy = b.option(bool, "enable_ztracy", "Enable Tracy profile markers") orelse false,
+    // };
 
     const target = b.standardTargetOptions(.{});
-
     const optimize = b.standardOptimizeOption(.{});
 
     var zge = b.addModule("zge", .{
@@ -41,13 +40,13 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("ecs", ecs);
     zge.addImport("ecs", ecs);
 
-    const ztracy_dep = b.dependency("ztracy", .{
-        .enable_ztracy = options.enable_ztracy,
-    });
-    const ztracy = ztracy_dep.module("root");
-    exe.root_module.addImport("ztracy", ztracy);
-    exe.linkLibrary(ztracy_dep.artifact("tracy"));
-    zge.addImport("ztracy", ztracy);
+    // const ztracy_dep = b.dependency("ztracy", .{
+    //     .enable_ztracy = options.enable_ztracy,
+    // });
+    // const ztracy = ztracy_dep.module("root");
+    // exe.root_module.addImport("ztracy", ztracy);
+    // exe.linkLibrary(ztracy_dep.artifact("tracy"));
+    // zge.addImport("ztracy", ztracy);
 
     b.installArtifact(exe);
 

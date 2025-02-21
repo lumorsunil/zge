@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const rl = @import("raylib");
 const ecs = @import("ecs");
-const ztracy = @import("ztracy");
+// const ztracy = @import("ztracy");
 
 const cfg = @import("config.zig");
 
@@ -96,8 +96,8 @@ pub const PhysicsSystem = struct {
     }
 
     pub fn update(self: *PhysicsSystem, dt: f32) void {
-        const zone = ztracy.ZoneNC(@src(), "physics upate", 0xff_00_00_00);
-        defer zone.End();
+        // const zone = ztracy.ZoneNC(@src(), "physics upate", 0xff_00_00_00);
+        // defer zone.End();
 
         const intervalTimeStep = dt / PHYSICS_SUB_STEPS;
 
@@ -115,8 +115,8 @@ pub const PhysicsSystem = struct {
     }
 
     pub fn updateDynamicSubSteps(self: *PhysicsSystem, dt: f32, maxTimeStep: f32) void {
-        const zone = ztracy.ZoneNC(@src(), "physics upate", 0xff_00_00_00);
-        defer zone.End();
+        // const zone = ztracy.ZoneNC(@src(), "physics upate", 0xff_00_00_00);
+        // defer zone.End();
 
         const timeStep = @min(dt, maxTimeStep);
 
@@ -135,8 +135,8 @@ pub const PhysicsSystem = struct {
     }
 
     fn updatePositions(self: *PhysicsSystem, dt: f32) void {
-        const zone = ztracy.ZoneNC(@src(), "update positions", 0xff_00_00_00);
-        defer zone.End();
+        // const zone = ztracy.ZoneNC(@src(), "update positions", 0xff_00_00_00);
+        // defer zone.End();
 
         self.bodyContainer.updatePositions(dt);
 
@@ -194,13 +194,13 @@ pub const PhysicsSystem = struct {
     }
 
     fn updateCollisions(self: *PhysicsSystem) void {
-        const zone = ztracy.ZoneNC(@src(), "update collisions", 0xff_00_00_00);
-        defer zone.End();
+        // const zone = ztracy.ZoneNC(@src(), "update collisions", 0xff_00_00_00);
+        // defer zone.End();
 
-        const bodies = self.view.raw();
+        // const bodies = self.view.raw();
 
-        zone.Text("Bodies:");
-        zone.Value(bodies.len);
+        // zone.Text("Bodies:");
+        // zone.Value(bodies.len);
 
         switch (collisionType) {
             .none => {},
@@ -213,8 +213,8 @@ pub const PhysicsSystem = struct {
 
     fn updateCollisionsWithContainer(self: *PhysicsSystem) void {
         for (self.view.data()) |entity| {
-            const zone = ztracy.ZoneN(@src(), "uc entity");
-            defer zone.End();
+            // const zone = ztracy.ZoneN(@src(), "uc entity");
+            // defer zone.End();
             const body = self.view.get(entity);
             if (body.s.isStatic) continue;
             self.collisionContainer.checkCollision(body, entity, self, emitPendingCollision);
@@ -292,8 +292,8 @@ pub const PhysicsSystem = struct {
     }
 
     fn resolveCollisions(self: PhysicsSystem) void {
-        const zone = ztracy.ZoneNC(@src(), "resolve collisions", 0xff_00_00_00);
-        defer zone.End();
+        // const zone = ztracy.ZoneNC(@src(), "resolve collisions", 0xff_00_00_00);
+        // defer zone.End();
 
         for (self.pendingCollisions[0..numberOfPendingCollisions]) |collision| {
             resolveCollision(collision);

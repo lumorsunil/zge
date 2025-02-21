@@ -1,5 +1,5 @@
 const std = @import("std");
-const ztracy = @import("ztracy");
+// const ztracy = @import("ztracy");
 
 const V = @import("../vector.zig").V;
 const Vector = @import("../vector.zig").Vector;
@@ -55,8 +55,8 @@ pub const AABB = struct {
     }
 
     pub fn intersects(self: AABB, other: AABB) bool {
-        const zone = ztracy.ZoneNC(@src(), "AABB: intersects", 0xff_ff_ff_00);
-        defer zone.End();
+        // const zone = ztracy.ZoneNC(@src(), "AABB: intersects", 0xff_ff_ff_00);
+        // defer zone.End();
 
         return @reduce(.And, self.br > other.tl) and
             @reduce(.And, other.br > self.tl);
@@ -75,8 +75,8 @@ pub const AABB = struct {
     }
 
     pub fn intersection(self: AABB, other: AABB) ?Intersection {
-        const zone = ztracy.ZoneNC(@src(), "AABB: intersection", 0xff_ff_ff_00);
-        defer zone.End();
+        // const zone = ztracy.ZoneNC(@src(), "AABB: intersection", 0xff_ff_ff_00);
+        // defer zone.End();
 
         const maxTl = @max(self.tl, other.tl);
         const minBr = @min(self.br, other.br);

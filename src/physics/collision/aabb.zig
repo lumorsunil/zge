@@ -1,6 +1,6 @@
 const std = @import("std");
 const assert = std.debug.assert;
-const ztracy = @import("ztracy");
+// const ztracy = @import("ztracy");
 
 const V = @import("../../vector.zig").V;
 const Vector = @import("../../vector.zig").Vector;
@@ -10,8 +10,8 @@ const CollisionResult = @import("result.zig").CollisionResult;
 const AABB = @import("../shape.zig").AABB;
 
 pub fn checkCollision(a: AABB, b: AABB, depth: *f32, axis: *Vector) bool {
-    const zone = ztracy.ZoneNC(@src(), "aabb check collision", 0x00_ff_ff_00);
-    defer zone.End();
+    // const zone = ztracy.ZoneNC(@src(), "aabb check collision", 0x00_ff_ff_00);
+    // defer zone.End();
 
     const maxTl = @max(a.tl, b.tl);
     const minBr = @min(a.br, b.br);

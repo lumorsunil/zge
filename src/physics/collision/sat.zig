@@ -1,5 +1,5 @@
 const std = @import("std");
-const ztracy = @import("ztracy");
+// const ztracy = @import("ztracy");
 
 const V = @import("../../vector.zig").V;
 const Vector = @import("../../vector.zig").Vector;
@@ -23,8 +23,8 @@ const MinMaxProjections = struct {
 };
 
 pub fn checkCollisionShapes(bodyA: *RigidBody, bodyB: *RigidBody) CollisionResult {
-    const zone = ztracy.ZoneNC(@src(), "SAT check collision", 0x00_ff_ff_00);
-    defer zone.End();
+    // const zone = ztracy.ZoneNC(@src(), "SAT check collision", 0x00_ff_ff_00);
+    // defer zone.End();
 
     var minDepth = std.math.inf(f32);
     var minAxis = V.init(std.math.inf(f32), std.math.inf(f32));

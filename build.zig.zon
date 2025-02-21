@@ -1,27 +1,6 @@
 .{
-    // This is the default name used by packages depending on this one. For
-    // example, when a user runs `zig fetch --save <url>`, this field is used
-    // as the key in the `dependencies` table. Although the user can choose a
-    // different name, most users will stick with this provided value.
-    //
-    // It is redundant to include "zig" in this name because it is already
-    // within the Zig package namespace.
     .name = "zig-game-engine",
-
-    // This is a [Semantic Version](https://semver.org/).
-    // In a future version of Zig it will be used for package deduplication.
     .version = "0.0.0",
-
-    // This field is optional.
-    // This is currently advisory only; Zig does not yet do anything
-    // with this value.
-    //.minimum_zig_version = "0.11.0",
-
-    // This field is optional.
-    // Each dependency must either provide a `url` and `hash`, or a `path`.
-    // `zig build --fetch` can be used to fetch all dependencies of a package, recursively.
-    // Once all dependencies are fetched, `zig build` no longer requires
-    // internet connectivity.
     .dependencies = .{
         .@"raylib-zig" = .{
             .url = "https://github.com/Not-Nik/raylib-zig/archive/devel.tar.gz",
@@ -31,14 +10,14 @@
             .url = "https://github.com/prime31/zig-ecs/archive/d3ae70ef6185b2e0269d62a57608bfce2567c102.zip",
             .hash = "1220949709178b133c4d7f6ddf87fa575a9f2e9afe545a39aafdc8c89e6abbe83412",
         },
-        .ztracy = .{ .path = "ztracy" },
+        .ztracy = .{
+            .url = "git+https://github.com/7R35C0/ztracy#435162adc9643f48ec4b9e3e5d86c6aebe95578a",
+            .hash = "1220d02ebfd349a43c7ddf450bc0f548339b502aa4d77dc37e8bf5d6fc8f1b7f871e",
+        },
     },
     .paths = .{
         "build.zig",
         "build.zig.zon",
         "src",
-        // For example...
-        //"LICENSE",
-        //"README.md",
     },
 }

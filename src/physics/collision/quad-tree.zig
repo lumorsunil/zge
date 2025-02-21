@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const BoundedArray = std.BoundedArray;
 
-const ztracy = @import("ztracy");
+// const ztracy = @import("ztracy");
 
 const V = @import("../../vector.zig").V;
 const Vector = @import("../../vector.zig").Vector;
@@ -161,20 +161,20 @@ pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
             context: anytype,
             comptime intersectionHandler: fn (context: @TypeOf(context), entry: *T, []Intersection(*T)) void,
         ) void {
-            const paiZone = ztracy.ZoneN(@src(), "QT: Populate and Intersect");
-            defer paiZone.End();
+            // const paiZone = ztracy.ZoneN(@src(), "QT: Populate and Intersect");
+            // defer paiZone.End();
 
             self.reset();
             self.entryValues = entries;
 
-            const prepareZone = ztracy.ZoneN(@src(), "QT: Prepare Pages");
+            // const prepareZone = ztracy.ZoneN(@src(), "QT: Prepare Pages");
             const pagesNeeded = calcPagesNeeded(entries.len);
             //std.log.info("populating {} entries with {} pages", .{ entries.len, pagesNeeded });
             self.prepareToAddPages(pagesNeeded);
-            prepareZone.End();
+            // prepareZone.End();
 
-            const addPagesZone = ztracy.ZoneN(@src(), "QT: Add Pages");
-            defer addPagesZone.End();
+            // const addPagesZone = ztracy.ZoneN(@src(), "QT: Add Pages");
+            // defer addPagesZone.End();
             _ = self.addPagePrepared(boundary);
 
             for (0..entries.len) |entry| {
@@ -190,16 +190,16 @@ pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
         }
 
         pub fn insert(self: *QT, entry: usize, entryAabb: AABB) bool {
-            const zone = ztracy.ZoneN(@src(), "QT: Insert");
-            defer zone.End();
+            // const zone = ztracy.ZoneN(@src(), "QT: Insert");
+            // defer zone.End();
 
             const root = self.getRoot().?;
             return self.insertIntoPage(root, entry, entryAabb);
         }
 
         pub fn intersecting(self: *QT, aabb: AABB) []Intersection(*T) {
-            const zone = ztracy.ZoneN(@src(), "QT: Intersecting");
-            defer zone.End();
+            // const zone = ztracy.ZoneN(@src(), "QT: Intersecting");
+            // defer zone.End();
 
             const root = self.getRoot();
             std.debug.assert(root != null);
@@ -220,8 +220,8 @@ pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
         }
 
         fn insertIntoPage(self: *QT, page: *Page, entry: usize, entryAabb: AABB) bool {
-            const zone = ztracy.ZoneN(@src(), "QT: Insert into Page");
-            defer zone.End();
+            // const zone = ztracy.ZoneN(@src(), "QT: Insert into Page");
+            // defer zone.End();
 
             if (!page.aabb.contains(entryAabb)) return false;
             return self.insertIntoPageSkipBoundaryCheck(page, entry, entryAabb);
@@ -249,8 +249,8 @@ pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
         }
 
         fn insertIntoQuadrants(self: *QT, page: *Page, entry: usize, entryAabb: AABB) bool {
-            const zone = ztracy.ZoneN(@src(), "QT: Insert into Quadrants");
-            defer zone.End();
+            // const zone = ztracy.ZoneN(@src(), "QT: Insert into Quadrants");
+            // defer zone.End();
 
             const subdivisions = page.subdivisions();
 
@@ -267,8 +267,8 @@ pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
         }
 
         fn intersectingOrphaned(self: *QT, aabb: AABB) void {
-            const zone = ztracy.ZoneN(@src(), "QT: Intersecting Orphaned");
-            defer zone.End();
+            // const zone = ztracy.ZoneN(@src(), "QT: Intersecting Orphaned");
+            // defer zone.End();
 
             for (self.orphanedEntries.items) |entry| {
                 if (aabb.intersection(entry.aabb)) |intersection| {
@@ -282,8 +282,8 @@ pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
         }
 
         fn intersectingEntry(self: *QT, aabb: AABB, entry: usize) void {
-            const zone = ztracy.ZoneN(@src(), "QT: Intersecting Entry");
-            defer zone.End();
+            // const zone = ztracy.ZoneN(@src(), "QT: Intersecting Entry");
+            // defer zone.End();
 
             const entryAabb = self.entries.items[entry];
             if (aabb.intersection(entryAabb)) |intersection| {
@@ -296,8 +296,8 @@ pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
         }
 
         fn intersectingForPage(self: *QT, aabb: AABB, page: *Page) void {
-            const zone = ztracy.ZoneN(@src(), "QT: Intersecting for Page");
-            defer zone.End();
+            // const zone = ztracy.ZoneN(@src(), "QT: Intersecting for Page");
+            // defer zone.End();
 
             if (!page.aabb.intersects(aabb)) return;
 
@@ -353,8 +353,8 @@ pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
         }
 
         fn intersectingForQuadrants(self: *QT, aabb: AABB, page: *Page) void {
-            const zone = ztracy.ZoneN(@src(), "QT: Intersecting for Quadrants");
-            defer zone.End();
+            // const zone = ztracy.ZoneN(@src(), "QT: Intersecting for Quadrants");
+            // defer zone.End();
 
             const checkOrderIdx = getQuadrantCheckOrder(aabb, page);
 
@@ -379,8 +379,8 @@ pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
         }
 
         fn addPagePrepared(self: *QT, boundary: AABB) *Page {
-            const zone = ztracy.ZoneN(@src(), "QT: Add Page");
-            defer zone.End();
+            // const zone = ztracy.ZoneN(@src(), "QT: Add Page");
+            // defer zone.End();
 
             self.pages.items[self.currentPagesIndex] = Page{
                 .aabb = boundary,

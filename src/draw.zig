@@ -307,8 +307,8 @@ pub const DrawSystem = struct {
         scale: f32,
         horizontalFlip: bool,
     ) void {
-        const screenP = self.camera.transformV(position);
-        self.drawTextureSR(texture, source, origin, screenP, rotation, scale, horizontalFlip);
+        const afterCameraP = self.camera.transformV(position);
+        self.drawTextureSR(texture, source, origin, afterCameraP, rotation, scale, horizontalFlip);
     }
 
     /// Draw texture with source rectangle
@@ -358,6 +358,16 @@ pub const DrawSystem = struct {
         rl.drawCircleLinesV(V.toRl(screenP), circle.radius * s, rl.Color.white);
     }
 
+    pub fn drawRectangleSolid(self: *DrawSystem, aabb: AABB, color: rl.Color) void {
+        const pos = self.screen.screenPositionV(aabb.center());
+        rl.drawRectanglePro(
+            rl.Rectangle.init(V.x(pos), V.y(pos), aabb.width(), aabb.height()),
+            V.toRl(aabb.size() * V.scalar(0.5)),
+            0,
+            color,
+        );
+    }
+
     pub fn drawRectangle(self: *DrawSystem, _: Rectangle, rb: *RigidBody) void {
         var transformedVertices: [5]rl.Vector2 = .{
             V.toRl(self.screenCoords(rb.aabb.tl)),
@@ -389,5 +399,17 @@ pub const DrawSystem = struct {
         rl.drawLineEx(tl, tr, lw, rl.Color.red);
         rl.drawLineEx(bl, br, lw, rl.Color.red);
         rl.drawLineEx(tr, br, lw, rl.Color.red);
+    }
+
+    pub fn drawText(self: *const DrawSystem, text: []const u8, position: Vector, fontSize: f32, color: rl.Color) void {
+        var buffer: [256]u8 = undefined;
+        const textZ = std.fmt.bufPrintZ(&buffer, "{s}", .{text}) catch unreachable;
+        const font = rl.getFontDefault();
+        const p = self.screen.screenPositionV(position);
+        const spacing = 2;
+        const measurement = rl.measureTextEx(font, textZ, fontSize, spacing);
+        const origin = V.fromRl(measurement) * V.scalar(0.5);
+
+        rl.drawTextPro(font, textZ, V.toRl(p), V.toRl(origin), 0, fontSize, spacing, color);
     }
 };
