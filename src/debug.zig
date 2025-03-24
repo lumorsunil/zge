@@ -259,9 +259,10 @@ pub const DebugScene = struct {
         }
     }
 
-    pub fn onCollision(self: *DebugScene, collisionEvent: CollisionEvent) void {
+    pub fn onCollision(self: *DebugScene, collisionEvent: CollisionEvent) bool {
         _ = self;
         _ = collisionEvent;
+        return true;
     }
 
     pub fn draw(self: *DebugScene) void {

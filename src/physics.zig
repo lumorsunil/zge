@@ -316,10 +316,10 @@ pub const PhysicsSystem = struct {
         self: PhysicsSystem,
         comptime T: type,
         context: T,
-        onEvent: fn (context: T, collisionEvent: Collision) void,
+        onEvent: fn (context: T, collisionEvent: Collision) bool,
     ) void {
         for (0..numberOfCollisionEvents) |i| {
-            onEvent(context, self.collisionEvents[i]);
+            if (onEvent(context, self.collisionEvents[i])) break;
         }
 
         numberOfCollisionEvents = 0;
