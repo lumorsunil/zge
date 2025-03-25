@@ -414,6 +414,7 @@ pub const PhysicsSystem = struct {
             self.collisionContainer.removeBody(entity);
         }
         self.bodyContainer.removeRigidBody(self.reg.entityId(entity));
+        self.collisionGroups.removeFromAllGroups(entity);
         self.reg.destroy(entity);
     }
 
