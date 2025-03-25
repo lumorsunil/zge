@@ -141,4 +141,17 @@ pub const CollisionEnabledFor = struct {
             self.enableCollisionsFor(allocator, entity, g.*);
         }
     }
+
+    pub fn removeFromGroup(
+        self: *CollisionEnabledFor,
+        entity: ecs.Entity,
+        groupKey: []const u8,
+    ) void {
+        const group = self.groups.getPtr(groupKey) orelse {
+            std.log.err("Group not found: {s}", .{groupKey});
+            return;
+        };
+        _ = group.entities.swapRemove(entity);
+        _ = self.collisionsEnabledFor.swapRemove(entity);
+    }
 };
