@@ -154,4 +154,15 @@ pub const CollisionEnabledFor = struct {
         _ = group.entities.swapRemove(entity);
         _ = self.collisionsEnabledFor.swapRemove(entity);
     }
+
+    pub fn removeFromAllGroups(
+        self: *CollisionEnabledFor,
+        entity: ecs.Entity,
+    ) void {
+        var it = self.groups.valueIterator();
+        while (it.next()) |group| {
+            _ = group.entities.swapRemove(entity);
+        }
+        _ = self.collisionsEnabledFor.swapRemove(entity);
+    }
 };
