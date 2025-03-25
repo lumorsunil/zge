@@ -21,6 +21,7 @@ const resolveCollision = @import("physics/collision.zig").resolveCollision;
 const AABB = @import("physics/shape.zig").AABB;
 const Circle = @import("physics/shape.zig").Circle;
 pub const Densities = @import("physics/rigid-body-static.zig").Densities;
+const CollisionEnabledFor = @import("physics/collision/group.zig").CollisionEnabledFor;
 
 pub const shape = @import("physics/shape.zig");
 
@@ -59,6 +60,8 @@ pub const PhysicsSystem = struct {
 
     boundary: AABB,
 
+    collisionGroups: CollisionEnabledFor,
+
     var numberOfPendingCollisions: usize = 0;
     var numberOfCollisionEvents: usize = 0;
 
@@ -80,14 +83,17 @@ pub const PhysicsSystem = struct {
             .overlappingBuffer = ArrayList(bool).initCapacity(allocator, 100) catch unreachable,
 
             .boundary = boundary,
+
+            .collisionGroups = CollisionEnabledFor.init(allocator),
         };
     }
 
-    pub fn deinit(self: *const PhysicsSystem) void {
+    pub fn deinit(self: *PhysicsSystem) void {
         self.bodyContainer.deinit();
         self.collisionContainer.deinit();
         self.sweepLineBuffer.deinit();
         self.overlappingBuffer.deinit();
+        self.collisionGroups.deinit();
     }
 
     pub fn numberOfTimeSteps(self: PhysicsSystem, dt: f32, maxTimeStep: f32) f32 {
@@ -296,7 +302,9 @@ pub const PhysicsSystem = struct {
         // defer zone.End();
 
         for (self.pendingCollisions[0..numberOfPendingCollisions]) |collision| {
-            resolveCollision(collision);
+            if (self.collisionGroups.isCollisionEnabledFor(collision.bodyA.key, collision.bodyB.key)) {
+                resolveCollision(collision);
+            }
         }
 
         numberOfPendingCollisions = 0;

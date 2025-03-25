@@ -58,6 +58,11 @@ pub const DebugScene = struct {
 
     pub fn bind(self: *DebugScene) void {
         self.drawSystem.bind();
+        self.physicsSystem.collisionGroups.createGroup(self.allocator, "player");
+        self.physicsSystem.collisionGroups.createGroup(self.allocator, "rectangles");
+        self.physicsSystem.collisionGroups.createGroup(self.allocator, "circles");
+        self.physicsSystem.collisionGroups.enableCollisionsForGroup(self.allocator, "player", "rectangles");
+        self.physicsSystem.collisionGroups.enableCollisionsForGroup(self.allocator, "rectangles", "circles");
     }
 
     pub fn deinit(self: *DebugScene) void {
@@ -77,9 +82,9 @@ pub const DebugScene = struct {
         );
     }
 
-    const maxRadius = 0.1 + 1;
+    const maxRadius = 10 + 2;
     pub fn randomRadius(self: *DebugScene) f32 {
-        return 0.1 + 1 * self.rand.random().float(f32);
+        return 10 + 5 * self.rand.random().float(f32);
     }
 
     pub fn addRandomCircle(self: *DebugScene) void {
@@ -119,6 +124,7 @@ pub const DebugScene = struct {
         switch (result) {
             .success => |static| {
                 _ = self.physicsSystem.addRigidBody(e, .{ .pos = position }, static);
+                self.physicsSystem.collisionGroups.addToGroup(self.allocator, e, "player");
             },
             .err => |err| std.log.err("{s}", .{err}),
         }
@@ -134,7 +140,7 @@ pub const DebugScene = struct {
 
         const result = RigidBodyStaticParams.init(
             .{ .rectangle = Rectangle.init(V.zero, size) },
-            Densities.Element.Osmium,
+            Densities.Water,
             0.2,
             isStatic,
         );
@@ -142,6 +148,7 @@ pub const DebugScene = struct {
         switch (result) {
             .success => |static| {
                 _ = self.physicsSystem.addRigidBody(e, .{ .pos = position }, static);
+                self.physicsSystem.collisionGroups.addToGroup(self.allocator, e, "rectangles");
             },
             .err => |err| std.log.err("{s}", .{err}),
         }
@@ -160,6 +167,7 @@ pub const DebugScene = struct {
         switch (result) {
             .success => |static| {
                 _ = self.physicsSystem.addRigidBody(e, .{ .pos = position }, static);
+                self.physicsSystem.collisionGroups.addToGroup(self.allocator, e, "circles");
             },
             .err => |err| std.log.err("{s}", .{err}),
         }
@@ -248,10 +256,18 @@ pub const DebugScene = struct {
             //self.addCircle(randomPositions[bodiesAdded], self.randomRadius(), false);
             const bodiesToAdd = 100;
             for (0..bodiesToAdd) |i| {
-                if (bodiesAdded + i >= numberOfBodiesToAdd) {
-                    self.addRectangle(self.randomPos(), self.randomSize(), false);
+                if (std.crypto.random.boolean()) {
+                    if (bodiesAdded + i >= numberOfBodiesToAdd) {
+                        self.addRectangle(self.randomPos(), self.randomSize(), false);
+                    } else {
+                        self.addRectangle(randomPositions[bodiesAdded + i], self.randomSize(), false);
+                    }
                 } else {
-                    self.addRectangle(randomPositions[bodiesAdded + i], self.randomSize(), false);
+                    if (bodiesAdded + i >= numberOfBodiesToAdd) {
+                        self.addCircle(self.randomPos(), self.randomRadius(), false);
+                    } else {
+                        self.addCircle(randomPositions[bodiesAdded + i], self.randomRadius(), false);
+                    }
                 }
             }
             bodiesAdded += bodiesToAdd;
