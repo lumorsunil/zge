@@ -152,7 +152,8 @@ pub const CollisionEnabledFor = struct {
             return;
         };
         _ = group.entities.swapRemove(entity);
-        _ = self.collisionsEnabledFor.swapRemove(entity);
+        const r = self.collisionsEnabledFor.fetchSwapRemove(entity) orelse return;
+        r.value.deinit();
     }
 
     pub fn removeFromAllGroups(
@@ -163,6 +164,7 @@ pub const CollisionEnabledFor = struct {
         while (it.next()) |group| {
             _ = group.entities.swapRemove(entity);
         }
-        _ = self.collisionsEnabledFor.swapRemove(entity);
+        const r = self.collisionsEnabledFor.fetchSwapRemove(entity) orelse return;
+        r.value.deinit();
     }
 };
