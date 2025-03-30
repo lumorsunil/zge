@@ -44,7 +44,6 @@ const CollisionType = enum {
 const collisionType: CollisionType = .quadTree;
 
 pub const PhysicsSystem = struct {
-    pendingCollisions: [MAX_COLLISION_EVENTS]Collision = undefined,
     collisionEvents: [MAX_COLLISION_EVENTS]Collision = undefined,
     gravity: Vector,
     groundFriction: f32,
@@ -62,7 +61,6 @@ pub const PhysicsSystem = struct {
 
     collisionGroups: CollisionEnabledFor,
 
-    var numberOfPendingCollisions: usize = 0;
     var numberOfCollisionEvents: usize = 0;
 
     pub fn init(allocator: Allocator, reg: *ecs.Registry, boundary: AABB) PhysicsSystem {
@@ -223,7 +221,7 @@ pub const PhysicsSystem = struct {
             // defer zone.End();
             const body = self.view.get(entity);
             if (body.s.isStatic) continue;
-            self.collisionContainer.checkCollision(body, entity, self, emitPendingCollision);
+            self.collisionContainer.checkCollision(body, entity, self, emitCollisionEvent);
         }
     }
 
@@ -232,7 +230,6 @@ pub const PhysicsSystem = struct {
 
         for (collisions) |collision| {
             self.emitCollisionEvent(collision);
-            self.emitPendingCollision(collision);
         }
     }
 
@@ -263,7 +260,7 @@ pub const PhysicsSystem = struct {
 
             switch (bodyA.checkCollision(bodyB)) {
                 .noCollision => {},
-                .collision => |collision| self.emitPendingCollision(collision),
+                .collision => |collision| self.emitCollisionEvent(collision),
             }
 
             left -= 1;
@@ -289,7 +286,7 @@ pub const PhysicsSystem = struct {
                         //                            .collision = collision,
                         //                        };
                         //                        self.emitCollisionEvent(collision);
-                        self.emitPendingCollision(collision);
+                        self.emitCollisionEvent(collision);
                     },
                     .noCollision => continue,
                 }
@@ -301,22 +298,15 @@ pub const PhysicsSystem = struct {
         // const zone = ztracy.ZoneNC(@src(), "resolve collisions", 0xff_00_00_00);
         // defer zone.End();
 
-        for (self.pendingCollisions[0..numberOfPendingCollisions]) |*collision| {
+        for (self.collisionEvents[0..numberOfCollisionEvents]) |*collision| {
             if (self.collisionGroups.isCollisionEnabledFor(collision.bodyA.key, collision.bodyB.key)) {
                 resolveCollision(collision);
             }
         }
-
-        numberOfPendingCollisions = 0;
     }
 
-    fn emitPendingCollision(self: *PhysicsSystem, collision: Collision) void {
-        self.pendingCollisions[numberOfPendingCollisions] = collision;
-        numberOfPendingCollisions += 1;
-    }
-
-    fn emitCollisionEvent(self: *PhysicsSystem, event: Collision) void {
-        self.collisionEvents[numberOfCollisionEvents] = event;
+    fn emitCollisionEvent(self: *PhysicsSystem, collision: Collision) void {
+        self.collisionEvents[numberOfCollisionEvents] = collision;
         numberOfCollisionEvents += 1;
     }
 
