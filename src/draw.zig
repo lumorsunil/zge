@@ -30,7 +30,6 @@ pub const DrawSystem = struct {
     textureView: ecs.MultiView(3, 0),
     topLayerView: ecs.MultiView(1, 1),
     shapeView: ecs.MultiView(1, 1),
-    ccView: ecs.BasicView(CollisionContainer),
     drawOrderList: ArrayList(ecs.Entity),
     allocator: Allocator,
 
@@ -51,7 +50,6 @@ pub const DrawSystem = struct {
             .textureView = reg.view(.{ TextureComponent, DrawLayerComponent, RigidBody }, .{}),
             .topLayerView = reg.view(.{RigidBody}, .{DrawLayerComponent}),
             .shapeView = reg.view(.{RigidBody}, .{TextureComponent}),
-            .ccView = reg.basicView(CollisionContainer),
             .drawOrderList = ArrayList(ecs.Entity).initCapacity(allocator, 100) catch unreachable,
             .allocator = allocator,
         };
@@ -164,7 +162,7 @@ pub const DrawSystem = struct {
     };
 
     fn drawCollisionContainer(self: *DrawSystem) void {
-        const cc = self.ccView.raw()[0];
+        const cc = self.reg.singletons().get(CollisionContainer);
 
         if (ccAlgorithm == .rTree) {
             self.drawPage(cc.tree.root, 1, cc.tree.height);
@@ -377,8 +375,10 @@ pub const DrawSystem = struct {
             V.toRl(self.screenCoords(rb.aabb.tl)),
         };
 
+        const cc = self.reg.singletons().get(CollisionContainer);
+
         const color = if (ccAlgorithm == .quadTree)
-            if (self.ccView.raw()[0].tree.isEntryInTree(rb)) rl.Color.white else rl.Color.red
+            if (cc.tree.isEntryInTree(rb)) rl.Color.white else rl.Color.red
         else
             rl.Color.white;
 

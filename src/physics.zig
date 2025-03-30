@@ -65,10 +65,8 @@ pub const PhysicsSystem = struct {
     var numberOfResolvedCollisions: usize = 0;
 
     pub fn init(allocator: Allocator, reg: *ecs.Registry, boundary: AABB) PhysicsSystem {
-        const cc = CollisionContainer.init(allocator, reg);
-        const cce = reg.create();
-        reg.add(cce, cc);
-        const ccPtr = reg.get(CollisionContainer, cce);
+        reg.singletons().add(CollisionContainer.init(allocator, reg));
+        const ccPtr = reg.singletons().get(CollisionContainer);
 
         return PhysicsSystem{
             .gravity = V.init(0, 0),
