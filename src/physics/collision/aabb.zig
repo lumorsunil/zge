@@ -55,6 +55,7 @@ pub fn checkCollisionBodies(bodyA: *RigidBody, bodyB: *RigidBody) CollisionResul
         .bodyB = bodyB,
         .depth = depth,
         .normal = axis,
+        .energyTransferred = undefined,
         .contact1 = undefined,
         .contact2 = undefined,
         .contactCount = undefined,

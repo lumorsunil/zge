@@ -297,11 +297,11 @@ pub const PhysicsSystem = struct {
         }
     }
 
-    fn resolveCollisions(self: PhysicsSystem) void {
+    fn resolveCollisions(self: *PhysicsSystem) void {
         // const zone = ztracy.ZoneNC(@src(), "resolve collisions", 0xff_00_00_00);
         // defer zone.End();
 
-        for (self.pendingCollisions[0..numberOfPendingCollisions]) |collision| {
+        for (self.pendingCollisions[0..numberOfPendingCollisions]) |*collision| {
             if (self.collisionGroups.isCollisionEnabledFor(collision.bodyA.key, collision.bodyB.key)) {
                 resolveCollision(collision);
             }

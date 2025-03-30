@@ -22,7 +22,7 @@ pub fn checkCollision(bodyA: *RigidBody, bodyB: *RigidBody) CollisionResult {
     }
 }
 
-pub fn resolveCollision(collision: Collision) void {
+pub fn resolveCollision(collision: *Collision) void {
     const normal = collision.normal;
     const depth = collision.depth;
     const bodyA = collision.bodyA;
@@ -44,6 +44,8 @@ pub fn resolveCollision(collision: Collision) void {
 
     const ja = V.dot(relV * V.scalar(-(1 + e)), normal);
     const j = if (std.math.isInf(massA)) ja * massB else if (std.math.isInf(massB)) ja * massA else ja * massA * massB / (massA + massB);
+
+    collision.energyTransferred = j;
 
     if (!bodyA.s.isStatic) {
         const resolution = vA - normal * V.scalar(j / massA);

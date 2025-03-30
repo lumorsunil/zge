@@ -12,6 +12,7 @@ pub const Collision = struct {
     bodyB: *RigidBody,
     normal: Vector,
     depth: f32,
+    energyTransferred: f32,
     contact1: Vector,
     contact2: Vector,
     contactCount: u2,
