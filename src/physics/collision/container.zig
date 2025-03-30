@@ -218,7 +218,6 @@ pub const CollisionContainer = struct {
                     .bodyB = other,
                     .depth = intersection.depth,
                     .normal = intersection.axis,
-                    .energyTransferred = undefined,
                     .contact1 = undefined,
                     .contact2 = undefined,
                     .contactCount = undefined,

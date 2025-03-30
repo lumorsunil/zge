@@ -48,7 +48,6 @@ pub fn checkCollisionShapes(bodyA: *RigidBody, bodyB: *RigidBody) CollisionResul
         .bodyB = bodyB,
         .depth = minDepth,
         .normal = minAxis,
-        .energyTransferred = undefined,
         .contact1 = undefined,
         .contact2 = undefined,
         .contactCount = undefined,

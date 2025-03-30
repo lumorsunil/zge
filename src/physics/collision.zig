@@ -31,6 +31,9 @@ pub fn resolveCollision(collision: *Collision) void {
     const vA = bodyA.d.cloneVel();
     const vB = bodyB.d.cloneVel();
 
+    collision.velocityA = vA;
+    collision.velocityB = vB;
+
     const pA = bodyA.d.clonePos();
     const pB = bodyB.d.clonePos();
 
@@ -44,8 +47,6 @@ pub fn resolveCollision(collision: *Collision) void {
 
     const ja = V.dot(relV * V.scalar(-(1 + e)), normal);
     const j = if (std.math.isInf(massA)) ja * massB else if (std.math.isInf(massB)) ja * massA else ja * massA * massB / (massA + massB);
-
-    collision.energyTransferred = j;
 
     if (!bodyA.s.isStatic) {
         const resolution = vA - normal * V.scalar(j / massA);
