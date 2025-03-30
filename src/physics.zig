@@ -62,6 +62,7 @@ pub const PhysicsSystem = struct {
     collisionGroups: CollisionEnabledFor,
 
     var numberOfCollisionEvents: usize = 0;
+    var numberOfResolvedCollisions: usize = 0;
 
     pub fn init(allocator: Allocator, reg: *ecs.Registry, boundary: AABB) PhysicsSystem {
         const cc = CollisionContainer.init(allocator, reg);
@@ -104,6 +105,9 @@ pub const PhysicsSystem = struct {
         // defer zone.End();
 
         const intervalTimeStep = dt / PHYSICS_SUB_STEPS;
+
+        numberOfCollisionEvents = 0;
+        numberOfResolvedCollisions = 0;
 
         self.updatePrevAccelerations();
 
@@ -298,11 +302,13 @@ pub const PhysicsSystem = struct {
         // const zone = ztracy.ZoneNC(@src(), "resolve collisions", 0xff_00_00_00);
         // defer zone.End();
 
-        for (self.collisionEvents[0..numberOfCollisionEvents]) |*collision| {
+        for (self.collisionEvents[numberOfResolvedCollisions..numberOfCollisionEvents]) |*collision| {
             if (self.collisionGroups.isCollisionEnabledFor(collision.bodyA.key, collision.bodyB.key)) {
                 resolveCollision(collision);
             }
         }
+
+        numberOfResolvedCollisions = numberOfCollisionEvents;
     }
 
     fn emitCollisionEvent(self: *PhysicsSystem, collision: Collision) void {
