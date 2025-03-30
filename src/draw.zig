@@ -111,10 +111,6 @@ pub const DrawSystem = struct {
             if (maybeTexture) |texture| {
                 self.drawTextureComponent(texture, body);
             }
-
-            if (showCollisionBoxes) {
-                self.drawShape(body);
-            }
         }
 
         var it = self.topLayerView.entityIterator();
@@ -126,8 +122,10 @@ pub const DrawSystem = struct {
             if (maybeTexture) |texture| {
                 self.drawTextureComponent(texture, body);
             }
+        }
 
-            if (showCollisionBoxes) {
+        if (showCollisionBoxes) {
+            for (self.bodyView.raw()) |*body| {
                 self.drawShape(body);
             }
         }
