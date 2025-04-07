@@ -12,7 +12,6 @@ const Circle = @import("physics/shape.zig").Circle;
 const Rectangle = @import("physics/shape.zig").Rectangle;
 const CollisionContainer = @import("physics/collision/container.zig").CollisionContainer;
 const ccAlgorithm = @import("physics/collision/container.zig").ccAlgorithm;
-const Camera = @import("camera.zig").Camera;
 const Screen = @import("screen.zig").Screen;
 const TextureComponent = @import("components.zig").TextureComponent;
 const Invisible = @import("components.zig").Invisible;
@@ -23,7 +22,6 @@ const Vector = @import("vector.zig").Vector;
 
 pub const DrawSystem = struct {
     screen: *const Screen,
-    camera: *Camera,
     reg: *ecs.Registry,
     bodyView: ecs.BasicView(RigidBody),
     layerView: ecs.BasicView(DrawLayerComponent),
@@ -40,10 +38,9 @@ pub const DrawSystem = struct {
     const layerDrawSpeed = 2;
     var nextLayerDrawnAt: f64 = layerDrawSpeed;
 
-    pub fn init(allocator: Allocator, reg: *ecs.Registry, screen: *const Screen, camera: *Camera) DrawSystem {
+    pub fn init(allocator: Allocator, reg: *ecs.Registry, screen: *const Screen) DrawSystem {
         return DrawSystem{
             .screen = screen,
-            .camera = camera,
             .reg = reg,
             .bodyView = reg.basicView(RigidBody),
             .layerView = reg.basicView(DrawLayerComponent),
@@ -144,7 +141,7 @@ pub const DrawSystem = struct {
     }
 
     fn screenCoords(self: *DrawSystem, v: Vector) Vector {
-        return self.screen.screenPositionV(self.camera.transformV(v));
+        return self.screen.screenPositionV(v);
     }
 
     const ccEntryColor = rl.Color.lime;
@@ -303,8 +300,7 @@ pub const DrawSystem = struct {
         scale: f32,
         horizontalFlip: bool,
     ) void {
-        const afterCameraP = self.camera.transformV(position);
-        self.drawTextureSR(texture, source, origin, afterCameraP, rotation, scale, horizontalFlip);
+        self.drawTextureSR(texture, source, origin, position, rotation, scale, horizontalFlip);
     }
 
     /// Draw texture with source rectangle
@@ -318,7 +314,7 @@ pub const DrawSystem = struct {
         scale: f32,
         horizontalFlip: bool,
     ) void {
-        const r = rotation + self.camera.angle();
+        const r = rotation;
         const sourceOffset = if (source) |s| s.tl else V.zero;
         const textureSize = if (source) |s| s.size() else V.fromInt(c_int, texture.width, texture.height);
         const p = position - textureSize * V.scalar(0.5 * scale);
@@ -347,11 +343,10 @@ pub const DrawSystem = struct {
     }
 
     pub fn drawCircle(self: *DrawSystem, circle: Circle, rb: *RigidBody) void {
-        const s = self.camera.s;
         const center = rb.aabb.center();
         const screenP = self.screenCoords(center);
 
-        rl.drawCircleLinesV(V.toRl(screenP), circle.radius * s, rl.Color.white);
+        rl.drawCircleLinesV(V.toRl(screenP), circle.radius, rl.Color.white);
     }
 
     pub fn drawRectangleSolid(self: *DrawSystem, aabb: AABB, color: rl.Color) void {

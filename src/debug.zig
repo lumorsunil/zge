@@ -8,7 +8,6 @@ const cfg = @import("config.zig");
 const Screen = @import("screen.zig").Screen;
 const PhysicsSystem = @import("physics.zig").PhysicsSystem;
 const DrawSystem = @import("draw.zig").DrawSystem;
-const Camera = @import("camera.zig").Camera;
 
 const V = @import("vector.zig").V;
 const Vector = @import("vector.zig").Vector;
@@ -23,7 +22,6 @@ const Circle = @import("physics/shape.zig").Circle;
 const Densities = @import("physics/rigid-body-static.zig").Densities;
 
 var screen = Screen.init(cfg.size);
-var camera = Camera.init();
 
 pub const DebugScene = struct {
     allocator: Allocator,
@@ -32,7 +30,6 @@ pub const DebugScene = struct {
     player: ecs.Entity,
 
     screen: *const Screen,
-    camera: *Camera,
     physicsSystem: PhysicsSystem = undefined,
     drawSystem: DrawSystem = undefined,
 
@@ -50,9 +47,8 @@ pub const DebugScene = struct {
             .player = 0,
 
             .screen = &screen,
-            .camera = &camera,
             .physicsSystem = PhysicsSystem.init(allocator, reg, boundary),
-            .drawSystem = DrawSystem.init(allocator, reg, &screen, &camera),
+            .drawSystem = DrawSystem.init(allocator, reg, &screen),
         };
     }
 
