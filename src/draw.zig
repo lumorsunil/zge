@@ -140,10 +140,6 @@ pub const DrawSystem = struct {
         }
     }
 
-    fn screenCoords(self: *DrawSystem, v: Vector) Vector {
-        return self.screen.screenPositionV(v);
-    }
-
     const ccEntryColor = rl.Color.lime;
 
     const ccLevelColors = [_]rl.Color{
@@ -202,8 +198,8 @@ pub const DrawSystem = struct {
         self.drawAabb(CollisionContainer.entryAabb(entry), ccEntryColor, 1);
     }
 
-    pub fn drawAabb(self: *DrawSystem, aabb: AABB, color: rl.Color, thickness: f32) void {
-        const p = self.screenCoords(aabb.tl);
+    pub fn drawAabb(_: *DrawSystem, aabb: AABB, color: rl.Color, thickness: f32) void {
+        const p = aabb.tl;
         rl.drawRectangleLinesEx(
             rl.Rectangle.init(
                 V.x(p),
@@ -305,7 +301,7 @@ pub const DrawSystem = struct {
 
     /// Draw texture with source rectangle
     pub fn drawTextureSR(
-        self: DrawSystem,
+        _: DrawSystem,
         texture: *const rl.Texture2D,
         source: ?AABB,
         origin: Vector,
@@ -318,13 +314,12 @@ pub const DrawSystem = struct {
         const sourceOffset = if (source) |s| s.tl else V.zero;
         const textureSize = if (source) |s| s.size() else V.fromInt(c_int, texture.width, texture.height);
         const p = position - textureSize * V.scalar(0.5 * scale);
-        const screenP = self.screen.screenPositionV(p);
 
         const scaledTextureSize = textureSize * V.scalar(scale);
 
         const sourceSize = if (horizontalFlip) textureSize * V.init(-1, 1) else textureSize;
         const sourceR = V.rect(sourceOffset, sourceSize);
-        const dest = V.rect(screenP, scaledTextureSize);
+        const dest = V.rect(p, scaledTextureSize);
 
         var origin_ = V.toRl(origin * V.scalar(scale));
 
@@ -342,15 +337,14 @@ pub const DrawSystem = struct {
         }
     }
 
-    pub fn drawCircle(self: *DrawSystem, circle: Circle, rb: *RigidBody) void {
+    pub fn drawCircle(_: *DrawSystem, circle: Circle, rb: *RigidBody) void {
         const center = rb.aabb.center();
-        const screenP = self.screenCoords(center);
 
-        rl.drawCircleLinesV(V.toRl(screenP), circle.radius, rl.Color.white);
+        rl.drawCircleLinesV(V.toRl(center), circle.radius, rl.Color.white);
     }
 
-    pub fn drawRectangleSolid(self: *DrawSystem, aabb: AABB, color: rl.Color) void {
-        const pos = self.screen.screenPositionV(aabb.center());
+    pub fn drawRectangleSolid(_: *DrawSystem, aabb: AABB, color: rl.Color) void {
+        const pos = aabb.center();
         rl.drawRectanglePro(
             rl.Rectangle.init(V.x(pos), V.y(pos), aabb.width(), aabb.height()),
             V.toRl(aabb.size() * V.scalar(0.5)),
@@ -361,11 +355,11 @@ pub const DrawSystem = struct {
 
     pub fn drawRectangle(self: *DrawSystem, _: Rectangle, rb: *RigidBody) void {
         var transformedVertices: [5]rl.Vector2 = .{
-            V.toRl(self.screenCoords(rb.aabb.tl)),
-            V.toRl(self.screenCoords(rb.aabb.tr())),
-            V.toRl(self.screenCoords(rb.aabb.br)),
-            V.toRl(self.screenCoords(rb.aabb.bl())),
-            V.toRl(self.screenCoords(rb.aabb.tl)),
+            V.toRl(rb.aabb.tl),
+            V.toRl(rb.aabb.tr()),
+            V.toRl(rb.aabb.br),
+            V.toRl(rb.aabb.bl()),
+            V.toRl(rb.aabb.tl),
         };
 
         const cc = self.reg.singletons().get(CollisionContainer);
@@ -382,8 +376,8 @@ pub const DrawSystem = struct {
         const lw = 4;
         const lo = V.all(lw / 2);
 
-        const tl = V.toRl(self.screenCoords(-lo));
-        const br = V.toRl(self.screenCoords(self.screen.size + lo));
+        const tl = V.toRl(-lo);
+        const br = V.toRl(self.screen.size + lo);
 
         const bl = rl.Vector2.init(V.x(tl), V.y(br));
         const tr = rl.Vector2.init(V.x(br), V.y(tl));
@@ -394,15 +388,14 @@ pub const DrawSystem = struct {
         rl.drawLineEx(tr, br, lw, rl.Color.red);
     }
 
-    pub fn drawText(self: *const DrawSystem, text: []const u8, position: Vector, fontSize: f32, color: rl.Color) void {
+    pub fn drawText(_: *const DrawSystem, text: []const u8, position: Vector, fontSize: f32, color: rl.Color) void {
         var buffer: [256]u8 = undefined;
         const textZ = std.fmt.bufPrintZ(&buffer, "{s}", .{text}) catch unreachable;
         const font = rl.getFontDefault();
-        const p = self.screen.screenPositionV(position);
         const spacing = 2;
         const measurement = rl.measureTextEx(font, textZ, fontSize, spacing);
         const origin = V.fromRl(measurement) * V.scalar(0.5);
 
-        rl.drawTextPro(font, textZ, V.toRl(p), V.toRl(origin), 0, fontSize, spacing, color);
+        rl.drawTextPro(font, textZ, V.toRl(position), V.toRl(origin), 0, fontSize, spacing, color);
     }
 };

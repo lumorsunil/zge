@@ -21,13 +21,19 @@ const Rectangle = @import("physics/shape.zig").Rectangle;
 const Circle = @import("physics/shape.zig").Circle;
 const Densities = @import("physics/rigid-body-static.zig").Densities;
 
-var screen = Screen.init(cfg.size);
+const screen = Screen.init(cfg.size);
 
 pub const DebugScene = struct {
     allocator: Allocator,
     reg: *ecs.Registry,
     rand: std.Random.DefaultPrng,
     player: ecs.Entity,
+    camera: rl.Camera2D = rl.Camera2D{
+        .zoom = 1,
+        .rotation = 0,
+        .target = .{ .x = 0, .y = 0 },
+        .offset = V.toRl(screen.sizeHalf),
+    },
 
     screen: *const Screen,
     physicsSystem: PhysicsSystem = undefined,
@@ -279,9 +285,11 @@ pub const DebugScene = struct {
 
     pub fn draw(self: *DebugScene) void {
         rl.beginDrawing();
-        rl.clearBackground(rl.Color.dark_blue);
-        self.drawSystem.draw();
-        rl.drawFPS(5, 5);
         defer rl.endDrawing();
+        rl.clearBackground(rl.Color.dark_blue);
+        rl.beginMode2D(self.camera);
+        self.drawSystem.draw();
+        rl.endMode2D();
+        rl.drawFPS(5, 5);
     }
 };

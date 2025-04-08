@@ -20,12 +20,4 @@ pub const Screen = struct {
     fn sync(self: *Screen) void {
         self.sizeHalf = self.size / V.scalar(2);
     }
-
-    pub fn screenPosition(self: Screen, x: f32, y: f32) Vector {
-        return self.screenPositionV(V.init(x, y));
-    }
-
-    pub fn screenPositionV(self: Screen, v: Vector) Vector {
-        return v + self.sizeHalf;
-    }
 };
