@@ -288,7 +288,7 @@ pub const DrawSystem = struct {
     /// Draw texture with source rectangle
     pub fn drawTextureSRWithCamera(
         self: DrawSystem,
-        texture: *const rl.Texture2D,
+        texture: rl.Texture2D,
         source: ?AABB,
         origin: Vector,
         position: Vector,
@@ -302,7 +302,7 @@ pub const DrawSystem = struct {
     /// Draw texture with source rectangle
     pub fn drawTextureSR(
         _: DrawSystem,
-        texture: *const rl.Texture2D,
+        texture: rl.Texture2D,
         source: ?AABB,
         origin: Vector,
         position: Vector,
@@ -327,7 +327,7 @@ pub const DrawSystem = struct {
             origin_.x = -origin_.x;
         }
 
-        rl.drawTexturePro(texture.*, sourceR, dest, origin_, r, rl.Color.white);
+        rl.drawTexturePro(texture, sourceR, dest, origin_, r, rl.Color.white);
     }
 
     pub fn drawShape(self: *DrawSystem, rb: *RigidBody) void {
