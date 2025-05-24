@@ -1,18 +1,16 @@
 .{
-    .name = "zge",
+    .name = .zge,
     .version = "0.0.0",
+    .fingerprint = 0xb1435c23392642a1, // Changing this has security and trust implications.
+    .minimum_zig_version = "0.14.1",
     .dependencies = .{
-        .@"raylib-zig" = .{
-            .url = "https://github.com/Not-Nik/raylib-zig/archive/de8c2d458516fc971f0859c4473e3381767d2471.zip",
-            .hash = "122058d3ea6318efb819d0bffba630afd1a459fa3a99b4bfe4b680a937d5de04d2fc",
+        .raylib_zig = .{
+            .url = "git+https://github.com/Not-Nik/raylib-zig#3bf08a304cfe2baf839705063ff999b8d8bc8c54",
+            .hash = "raylib_zig-5.6.0-dev-KE8REKAqBQAQugfCOjYYVRFOi7iaEJK1EMDcRUq8AOm2",
         },
         .entt = .{
-            .url = "https://github.com/prime31/zig-ecs/archive/d3ae70ef6185b2e0269d62a57608bfce2567c102.zip",
-            .hash = "1220949709178b133c4d7f6ddf87fa575a9f2e9afe545a39aafdc8c89e6abbe83412",
-        },
-        .ztracy = .{
-            .url = "git+https://github.com/7R35C0/ztracy#435162adc9643f48ec4b9e3e5d86c6aebe95578a",
-            .hash = "1220d02ebfd349a43c7ddf450bc0f548339b502aa4d77dc37e8bf5d6fc8f1b7f871e",
+            .url = "git+https://github.com/prime31/zig-ecs#5128295bdeb2f253217dd0c6f665487d95f061a3",
+            .hash = "entt-1.0.0-qJPtbD-oAgCEwd68KlDxWkJiIIRSEmDl1j8K_KcXSJ6v",
         },
     },
     .paths = .{

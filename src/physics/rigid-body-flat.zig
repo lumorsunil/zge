@@ -37,7 +37,7 @@ pub const RigidBodyFlat = struct {
         return self.d.cloneVel() * V.scalar(self.s.mass());
     }
 
-    pub fn aabb(self: RigidBodyFlat) AABB {
+    pub fn calculateAabb(self: RigidBodyFlat) AABB {
         return self.s.aabb(self.d.r.*).scale(self.d.s).add(V.fromP(self.d.p));
     }
 
@@ -55,7 +55,7 @@ pub const RigidBodyFlat = struct {
 
     pub fn updateTransform(self: *RigidBodyFlat) void {
         self.s.updateTransform(self.d.clonePos(), self.d.r.*, self.d.s);
-        self.aabb = RigidBodyFlat.aabb(self.*);
+        self.aabb = self.calculateAabb();
     }
 
     pub fn checkCollision(self: *RigidBodyFlat, other: *RigidBodyFlat) CollisionResult {

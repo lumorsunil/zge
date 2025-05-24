@@ -264,7 +264,7 @@ pub const Shape = union(enum) {
         };
     }
 
-    pub fn vertices(self: *const Shape) []const Vector {
+    pub fn getVertices(self: *const Shape) []const Vector {
         return switch (self.*) {
             .circle => |*circle| &circle.vertices,
             .rectangle => |*rectangle| &rectangle.vertices,
@@ -341,7 +341,7 @@ pub const Rectangle = struct {
             .transformedVertices = undefined,
         };
 
-        vertices(rect.offset, rect.size, &rect.vertices);
+        setVertices(rect.offset, rect.size, &rect.vertices);
         updateTransform(&rect, V.zero, 0, 1);
 
         return rect;
@@ -379,7 +379,7 @@ pub const Rectangle = struct {
         return V.max(self.size);
     }
 
-    pub fn vertices(offset: Vector, size: Vector, buffer: *[4]Vector) void {
+    pub fn setVertices(offset: Vector, size: Vector, buffer: *[4]Vector) void {
         const halfSize = size / V.scalar(2);
 
         const l = V.x(offset) - V.x(halfSize);
