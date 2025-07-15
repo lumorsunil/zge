@@ -161,6 +161,11 @@ pub const V = struct {
     pub fn greaterThan(v: Vector, u: Vector) bool {
         return @reduce(.And, v > u);
     }
+
+    pub fn angleTo(v: Vector, u: Vector) f32 {
+        const d = u - v;
+        return std.math.atan2(V.y(d), V.x(d));
+    }
 };
 
 pub const PVector = VectorGeneric(*f32);
