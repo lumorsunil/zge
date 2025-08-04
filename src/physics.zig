@@ -409,7 +409,7 @@ pub const PhysicsSystem = struct {
         }
         self.bodyContainer.removeRigidBody(self.reg.entityId(entity));
         self.collisionGroups.removeFromAllGroups(entity);
-        self.reg.destroy(entity);
+        self.reg.remove(RigidBody, entity);
     }
 
     fn updateRigidBodiesInRegistry(self: *PhysicsSystem) void {
