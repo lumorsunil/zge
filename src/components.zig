@@ -20,12 +20,17 @@ pub const TextureComponent = struct {
     }
 };
 
+var drawLayerSubZCounter: u32 = 0;
+
 pub const DrawLayerComponent = struct {
     z: u32,
+    subZ: u32,
 
     pub fn init(z: u32) DrawLayerComponent {
+        drawLayerSubZCounter +%= 1;
         return DrawLayerComponent{
             .z = z,
+            .subZ = drawLayerSubZCounter,
         };
     }
 };

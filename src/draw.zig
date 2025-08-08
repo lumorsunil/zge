@@ -217,7 +217,7 @@ pub const DrawSystem = struct {
         const layerA = self.textureView.getConst(DrawLayerComponent, a);
         const layerB = self.textureView.getConst(DrawLayerComponent, b);
 
-        return layerA.z < layerB.z;
+        return (layerA.z == layerB.z and layerA.subZ < layerB.subZ) or layerA.z < layerB.z;
     }
 
     fn ensureDrawOrderCapacity(self: *DrawSystem, reg: *ecs.Registry, entity: ecs.Entity) void {
@@ -237,7 +237,7 @@ pub const DrawSystem = struct {
 
     fn drawOrder(self: *DrawSystem) []const ecs.Entity {
         const filtered = util.filterTo(ecs.Entity, self.layerView.data(), self.drawOrderList.items, self, drawOrderFilterFn);
-        // std.mem.sort(ecs.Entity, filtered, self, minYComparer);
+        std.mem.sort(ecs.Entity, filtered, self, minYComparer);
 
         return filtered;
     }
