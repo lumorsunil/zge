@@ -237,7 +237,7 @@ pub const DrawSystem = struct {
 
     fn drawOrder(self: *DrawSystem) []const ecs.Entity {
         const filtered = util.filterTo(ecs.Entity, self.layerView.data(), self.drawOrderList.items, self, drawOrderFilterFn);
-        std.mem.sort(ecs.Entity, filtered, self, minYComparer);
+        // std.mem.sort(ecs.Entity, filtered, self, minYComparer);
 
         return filtered;
     }
