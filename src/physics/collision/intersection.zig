@@ -1,8 +1,8 @@
 const Vector = @import("../../vector.zig").Vector;
 
-pub fn Intersection(comptime T: type) type {
+pub fn Intersection(comptime K: type) type {
     return struct {
-        entry: T,
+        entry: K,
         depth: f32,
         axis: Vector,
     };

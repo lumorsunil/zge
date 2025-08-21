@@ -45,8 +45,10 @@ const CCRTreeEntry = Entry(ecs.Entity, *CollisionContainer, RTreeEntryExtension)
 const CCRTree = RTree(CCRTreeEntry, RTreeEntryExtension.aabb, RTreeEntryExtension.id);
 
 const QuadTreeGetAabb = struct {
-    pub fn getAabb(entry: *QuadTreeEntry) AABB {
-        return entry.*.aabb;
+    pub fn getAabb(ctx: *anyopaque, entryKey: ecs.Entity) AABB {
+        const reg: *ecs.Registry = @ptrCast(@alignCast(ctx));
+        const body = reg.get(RigidBody, entryKey);
+        return body.aabb;
     }
 };
 
@@ -63,7 +65,7 @@ pub const CollisionContainer = struct {
 
     pub const RTreeEntry = CCRTreeEntry;
     pub const RTree = CCRTree;
-    pub const QT = QuadTree(QuadTreeEntry, QuadTreeGetAabb.getAabb);
+    pub const QT = QuadTree(ecs.Entity, QuadTreeGetAabb.getAabb);
 
     const EntryType = entryType: {
         if (ccAlgorithm == .rTree) {
@@ -89,8 +91,8 @@ pub const CollisionContainer = struct {
         };
     }
 
-    pub fn deinit(self: CollisionContainer) void {
-        self.tree.deinit();
+    pub fn deinit(self: *CollisionContainer) void {
+        self.tree.deinit(self.allocator);
         self.collisions.deinit();
     }
 
@@ -130,8 +132,8 @@ pub const CollisionContainer = struct {
     pub fn intersectingBody(
         self: *CollisionContainer,
         body: RigidBody,
-    ) []Intersection(*EntryType) {
-        var result = ArrayList(Intersection(*EntryType)).init(self.allocator);
+    ) []Intersection(ecs.Entity) {
+        var result = ArrayList(Intersection(ecs.Entity)).init(self.allocator);
 
         const intersections = if (ccAlgorithm == .rTree)
             self.tree.intersecting(body.aabb, 0)
@@ -150,8 +152,8 @@ pub const CollisionContainer = struct {
     pub fn intersectingAABB(
         self: *CollisionContainer,
         aabb: AABB,
-    ) []Intersection(*EntryType) {
-        var result = ArrayList(Intersection(*EntryType)).init(self.allocator);
+    ) []Intersection(ecs.Entity) {
+        var result = ArrayList(Intersection(ecs.Entity)).init(self.allocator);
 
         const intersections = if (ccAlgorithm == .rTree)
             self.tree.intersecting(aabb, 0)
@@ -192,17 +194,27 @@ pub const CollisionContainer = struct {
 
     pub fn checkCollisionsQT(self: *CollisionContainer, boundary: AABB) []Collision {
         self.collisions.resize(0) catch unreachable;
-        self.tree.populateAndIntersect(boundary, self.view.raw(), self, intersectionHandler);
+        self.tree.populateAndIntersect(
+            self.allocator,
+            self.reg,
+            boundary,
+            self.view.data(),
+            self,
+            intersectionHandler,
+        );
         return self.collisions.items;
     }
 
     fn intersectionHandler(
         self: *CollisionContainer,
-        body: *RigidBody,
-        intersections: []Intersection(*RigidBody),
+        entity: ecs.Entity,
+        intersections: []Intersection(ecs.Entity),
     ) void {
+        const body = self.reg.get(RigidBody, entity);
+
         for (intersections) |intersection| {
-            const other = intersection.entry;
+            const otherEntity = intersection.entry;
+            const other = self.reg.get(RigidBody, otherEntity);
 
             if (body.s.isStatic and other.s.isStatic) {
                 continue;

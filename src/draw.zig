@@ -57,6 +57,7 @@ pub const DrawSystem = struct {
         self.drawOrderList.deinit();
     }
 
+    /// This needs to be called as part of initialization
     pub fn bind(self: *DrawSystem) void {
         self.reg.onConstruct(RigidBody).connectBound(self, DrawSystem.ensureDrawOrderCapacity);
     }
@@ -366,7 +367,7 @@ pub const DrawSystem = struct {
         const cc = self.reg.singletons().get(CollisionContainer);
 
         const color = if (ccAlgorithm == .quadTree)
-            if (cc.tree.isEntryInTree(rb)) rl.Color.white else rl.Color.red
+            if (cc.tree.isEntryInTree(rb.key)) rl.Color.white else rl.Color.red
         else
             rl.Color.white;
 

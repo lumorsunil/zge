@@ -331,7 +331,7 @@ pub const PhysicsSystem = struct {
     pub fn findIntersectionsBody(
         self: PhysicsSystem,
         body: *RigidBody,
-    ) []Intersection(*RigidBody) {
+    ) []Intersection(ecs.Entity) {
         return self.collisionContainer.intersectingBody(body.*);
     }
 
@@ -339,7 +339,7 @@ pub const PhysicsSystem = struct {
     pub fn findIntersectionsRect(
         self: PhysicsSystem,
         rect: AABB,
-    ) []Intersection(*RigidBody) {
+    ) []Intersection(ecs.Entity) {
         return self.collisionContainer.intersectingAABB(rect);
     }
 
@@ -348,7 +348,7 @@ pub const PhysicsSystem = struct {
         self: PhysicsSystem,
         radius: f32,
         offset: Vector,
-    ) []Intersection(*RigidBody) {
+    ) []Intersection(ecs.Entity) {
         var circle = Circle.init(radius);
         circle.offset = offset;
         circle.updateTransform(V.zero, 0, 1);
@@ -418,7 +418,7 @@ pub const PhysicsSystem = struct {
         for (view.data()) |entity| {
             const body = view.get(entity);
             const id = self.reg.entityId(entity);
-            self.bodyContainer.updateRigidBodyPointers(id, &body.*.d);
+            self.bodyContainer.updateRigidBodyPointers(id, &body.d);
         }
     }
 };

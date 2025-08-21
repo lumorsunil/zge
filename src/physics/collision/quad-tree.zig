@@ -26,12 +26,12 @@ const MAX_ENTRIES_IN_PAGE = 10;
 /// How many levels to make space for after the pages needed calculation depending on the number of entries
 const PAGE_LEVELS_PADDING = 4;
 
-pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
+pub fn QuadTree(comptime K: type, comptime getEntryAabb: fn (*anyopaque, K) AABB) type {
     return struct {
-        const QT = QuadTree(T, getEntryAabb);
+        const QT = QuadTree(K, getEntryAabb);
 
         pub const Entry = struct {
-            value: *T,
+            value: K,
             aabb: AABB,
         };
 
@@ -89,13 +89,14 @@ pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
             }
         };
 
+        context: *anyopaque = undefined,
         pages: ArrayList(Page),
         entries: ArrayList(AABB),
-        entryValues: []T,
+        entryValues: []const K,
         orphanedEntries: ArrayList(Entry),
         currentPagesIndex: usize,
         currentEntriesIndex: usize,
-        intersectingBuffer: ArrayList(Intersection(*T)),
+        intersectingBuffer: ArrayList(Intersection(K)),
 
         pub fn init(allocator: Allocator) QT {
             return QT{
@@ -103,22 +104,25 @@ pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
                 .entries = ArrayList(AABB).initCapacity(allocator, INITIAL_ENTRIES_CAPACITY) catch unreachable,
                 .entryValues = &.{},
                 .orphanedEntries = ArrayList(Entry).initCapacity(allocator, MAX_ENTRIES_IN_PAGE * 10) catch unreachable,
-                .intersectingBuffer = ArrayList(Intersection(*T)).initCapacity(allocator, 100) catch unreachable,
+                .intersectingBuffer = ArrayList(Intersection(K)).initCapacity(allocator, 100) catch unreachable,
                 .currentPagesIndex = 0,
                 .currentEntriesIndex = 0,
             };
         }
 
-        pub fn deinit(self: QT) void {
+        pub fn deinit(self: *QT, allocator: Allocator) void {
             self.pages.deinit();
             self.entries.deinit();
+            if (self.entryValues.len > 0) allocator.free(self.entryValues);
+            self.entryValues = &.{};
             self.orphanedEntries.deinit();
             self.intersectingBuffer.deinit();
         }
 
-        pub fn reset(self: *QT) void {
+        pub fn reset(self: *QT, allocator: Allocator) void {
             self.pages.resize(0) catch unreachable;
             self.entries.resize(0) catch unreachable;
+            if (self.entryValues.len > 0) allocator.free(self.entryValues);
             self.entryValues = &.{};
             self.orphanedEntries.resize(0) catch unreachable;
             self.intersectingBuffer.resize(0) catch unreachable;
@@ -156,16 +160,19 @@ pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
 
         pub fn populateAndIntersect(
             self: *QT,
+            allocator: Allocator,
+            getEntryAabbContext: *anyopaque,
             boundary: AABB,
-            entries: []T,
+            entries: []const K,
             context: anytype,
-            comptime intersectionHandler: fn (context: @TypeOf(context), entry: *T, []Intersection(*T)) void,
+            comptime intersectionHandler: fn (context: @TypeOf(context), entry: K, []Intersection(K)) void,
         ) void {
             // const paiZone = ztracy.ZoneN(@src(), "QT: Populate and Intersect");
             // defer paiZone.End();
 
-            self.reset();
-            self.entryValues = entries;
+            self.reset(allocator);
+            self.entryValues = allocator.dupe(K, entries) catch unreachable;
+            self.context = getEntryAabbContext;
 
             // const prepareZone = ztracy.ZoneN(@src(), "QT: Prepare Pages");
             const pagesNeeded = calcPagesNeeded(entries.len);
@@ -178,8 +185,8 @@ pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
             _ = self.addPagePrepared(boundary);
 
             for (0..entries.len) |entry| {
-                const entryValue = &entries[entry];
-                const entryAabb = getEntryAabb(entryValue);
+                const entryValue = entries[entry];
+                const entryAabb = getEntryAabb(self.context, entryValue);
 
                 if (!self.insert(entry, entryAabb)) {
                     self.orphanedEntries.append(Entry{ .value = entryValue, .aabb = entryAabb }) catch unreachable;
@@ -197,7 +204,7 @@ pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
             return self.insertIntoPage(root, entry, entryAabb);
         }
 
-        pub fn intersecting(self: *QT, aabb: AABB) []Intersection(*T) {
+        pub fn intersecting(self: *QT, aabb: AABB) []Intersection(K) {
             // const zone = ztracy.ZoneN(@src(), "QT: Intersecting");
             // defer zone.End();
 
@@ -210,9 +217,9 @@ pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
             return self.intersectingBuffer.items;
         }
 
-        pub fn isEntryInTree(self: QT, entry: *T) bool {
-            for (self.entryValues) |*e| {
-                if (e == entry) {
+        pub fn isEntryInTree(self: QT, entryKey: K) bool {
+            for (self.entryValues) |e| {
+                if (e == entryKey) {
                     return true;
                 }
             }
@@ -272,7 +279,7 @@ pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
 
             for (self.orphanedEntries.items) |entry| {
                 if (aabb.intersection(entry.aabb)) |intersection| {
-                    self.intersectingBuffer.append(Intersection(*T){
+                    self.intersectingBuffer.append(.{
                         .entry = entry.value,
                         .axis = intersection.axis,
                         .depth = intersection.depth,
@@ -287,8 +294,8 @@ pub fn QuadTree(comptime T: type, comptime getEntryAabb: fn (*T) AABB) type {
 
             const entryAabb = self.entries.items[entry];
             if (aabb.intersection(entryAabb)) |intersection| {
-                self.intersectingBuffer.append(Intersection(*T){
-                    .entry = &self.entryValues[entry],
+                self.intersectingBuffer.append(.{
+                    .entry = self.entryValues[entry],
                     .axis = intersection.axis,
                     .depth = intersection.depth,
                 }) catch unreachable;

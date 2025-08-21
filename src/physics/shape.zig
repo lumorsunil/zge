@@ -237,6 +237,28 @@ pub const AABB = struct {
             .isMinimal = self.isMinimal,
         };
     }
+
+    pub fn scaleX(self: AABB, s: f32) AABB {
+        const expansion = self.size() * V.init(s / 2, 1);
+        const c = self.center();
+
+        return AABB{
+            .tl = c - expansion,
+            .br = c + expansion,
+            .isMinimal = self.isMinimal,
+        };
+    }
+
+    pub fn scaleY(self: AABB, s: f32) AABB {
+        const expansion = self.size() * V.init(1, s / 2);
+        const c = self.center();
+
+        return AABB{
+            .tl = c - expansion,
+            .br = c + expansion,
+            .isMinimal = self.isMinimal,
+        };
+    }
 };
 
 pub const Shape = union(enum) {
