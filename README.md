@@ -1,5 +1,7 @@
 # zge (zig-game-engine name is a WIP)
 
+zig version 0.15.1
+
 This is my game engine that I'm using for my games written in Zig.
 
 I'm making this available for educational purposes, it is not meant to be a game engine that anyone can pick up and use.
