@@ -1,7 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
-const BoundedArray = std.BoundedArray;
 
 // const ztracy = @import("ztracy");
 
@@ -47,7 +46,17 @@ pub fn QuadTree(comptime K: type, comptime getEntryAabb: fn (*anyopaque, K) AABB
         pub const Page = struct {
             aabb: AABB,
             offset: usize,
-            entries: BoundedArray(usize, MAX_ENTRIES_IN_PAGE),
+            entries: struct {
+                buffer: [MAX_ENTRIES_IN_PAGE]usize = undefined,
+                len: usize = 0,
+
+                pub const empty: @This() = .{};
+
+                pub fn append(self: *@This(), item: usize) void {
+                    self.buffer[self.len] = item;
+                    self.len += 1;
+                }
+            },
             quadrants: Subdivision(?*Page) = Subdivision(?*Page){
                 .tl = null,
                 .tr = null,
@@ -111,21 +120,21 @@ pub fn QuadTree(comptime K: type, comptime getEntryAabb: fn (*anyopaque, K) AABB
         }
 
         pub fn deinit(self: *QT, allocator: Allocator) void {
-            self.pages.deinit();
-            self.entries.deinit();
+            self.pages.deinit(allocator);
+            self.entries.deinit(allocator);
             if (self.entryValues.len > 0) allocator.free(self.entryValues);
             self.entryValues = &.{};
-            self.orphanedEntries.deinit();
-            self.intersectingBuffer.deinit();
+            self.orphanedEntries.deinit(allocator);
+            self.intersectingBuffer.deinit(allocator);
         }
 
         pub fn reset(self: *QT, allocator: Allocator) void {
-            self.pages.resize(0) catch unreachable;
-            self.entries.resize(0) catch unreachable;
+            self.pages.resize(allocator, 0) catch unreachable;
+            self.entries.resize(allocator, 0) catch unreachable;
             if (self.entryValues.len > 0) allocator.free(self.entryValues);
             self.entryValues = &.{};
-            self.orphanedEntries.resize(0) catch unreachable;
-            self.intersectingBuffer.resize(0) catch unreachable;
+            self.orphanedEntries.resize(allocator, 0) catch unreachable;
+            self.intersectingBuffer.resize(allocator, 0) catch unreachable;
             self.currentPagesIndex = 0;
             self.currentEntriesIndex = 0;
         }
@@ -177,7 +186,7 @@ pub fn QuadTree(comptime K: type, comptime getEntryAabb: fn (*anyopaque, K) AABB
             // const prepareZone = ztracy.ZoneN(@src(), "QT: Prepare Pages");
             const pagesNeeded = calcPagesNeeded(entries.len);
             //std.log.info("populating {} entries with {} pages", .{ entries.len, pagesNeeded });
-            self.prepareToAddPages(pagesNeeded);
+            self.prepareToAddPages(allocator, pagesNeeded);
             // prepareZone.End();
 
             // const addPagesZone = ztracy.ZoneN(@src(), "QT: Add Pages");
@@ -189,9 +198,9 @@ pub fn QuadTree(comptime K: type, comptime getEntryAabb: fn (*anyopaque, K) AABB
                 const entryAabb = getEntryAabb(self.context, entryValue);
 
                 if (!self.insert(entry, entryAabb)) {
-                    self.orphanedEntries.append(Entry{ .value = entryValue, .aabb = entryAabb }) catch unreachable;
+                    self.orphanedEntries.append(allocator, Entry{ .value = entryValue, .aabb = entryAabb }) catch unreachable;
                 }
-                const intersections = self.intersecting(entryAabb);
+                const intersections = self.intersecting(allocator, entryAabb);
                 intersectionHandler(context, entryValue, intersections);
             }
         }
@@ -204,16 +213,20 @@ pub fn QuadTree(comptime K: type, comptime getEntryAabb: fn (*anyopaque, K) AABB
             return self.insertIntoPage(root, entry, entryAabb);
         }
 
-        pub fn intersecting(self: *QT, aabb: AABB) []Intersection(K) {
+        pub fn intersecting(
+            self: *QT,
+            allocator: Allocator,
+            aabb: AABB,
+        ) []Intersection(K) {
             // const zone = ztracy.ZoneN(@src(), "QT: Intersecting");
             // defer zone.End();
 
             const root = self.getRoot();
             std.debug.assert(root != null);
-            self.intersectingBuffer.resize(0) catch unreachable;
+            self.intersectingBuffer.shrinkRetainingCapacity(0);
             if (self.currentPagesIndex == 0) return &.{};
-            self.intersectingForPage(aabb, root.?);
-            self.intersectingOrphaned(aabb);
+            self.intersectingForPage(allocator, aabb, root.?);
+            self.intersectingOrphaned(allocator, aabb);
             return self.intersectingBuffer.items;
         }
 
@@ -250,7 +263,7 @@ pub fn QuadTree(comptime K: type, comptime getEntryAabb: fn (*anyopaque, K) AABB
             if (!page.canAccomodate()) return false;
 
             self.entries.items[entry] = entryAabb;
-            page.entries.append(entry) catch unreachable;
+            page.entries.append(entry);
 
             return true;
         }
@@ -273,13 +286,13 @@ pub fn QuadTree(comptime K: type, comptime getEntryAabb: fn (*anyopaque, K) AABB
             return false;
         }
 
-        fn intersectingOrphaned(self: *QT, aabb: AABB) void {
+        fn intersectingOrphaned(self: *QT, allocator: Allocator, aabb: AABB) void {
             // const zone = ztracy.ZoneN(@src(), "QT: Intersecting Orphaned");
             // defer zone.End();
 
             for (self.orphanedEntries.items) |entry| {
                 if (aabb.intersection(entry.aabb)) |intersection| {
-                    self.intersectingBuffer.append(.{
+                    self.intersectingBuffer.append(allocator, .{
                         .entry = entry.value,
                         .axis = intersection.axis,
                         .depth = intersection.depth,
@@ -288,13 +301,18 @@ pub fn QuadTree(comptime K: type, comptime getEntryAabb: fn (*anyopaque, K) AABB
             }
         }
 
-        fn intersectingEntry(self: *QT, aabb: AABB, entry: usize) void {
+        fn intersectingEntry(
+            self: *QT,
+            allocator: Allocator,
+            aabb: AABB,
+            entry: usize,
+        ) void {
             // const zone = ztracy.ZoneN(@src(), "QT: Intersecting Entry");
             // defer zone.End();
 
             const entryAabb = self.entries.items[entry];
             if (aabb.intersection(entryAabb)) |intersection| {
-                self.intersectingBuffer.append(.{
+                self.intersectingBuffer.append(allocator, .{
                     .entry = self.entryValues[entry],
                     .axis = intersection.axis,
                     .depth = intersection.depth,
@@ -302,7 +320,12 @@ pub fn QuadTree(comptime K: type, comptime getEntryAabb: fn (*anyopaque, K) AABB
             }
         }
 
-        fn intersectingForPage(self: *QT, aabb: AABB, page: *Page) void {
+        fn intersectingForPage(
+            self: *QT,
+            allocator: Allocator,
+            aabb: AABB,
+            page: *Page,
+        ) void {
             // const zone = ztracy.ZoneN(@src(), "QT: Intersecting for Page");
             // defer zone.End();
 
@@ -310,10 +333,10 @@ pub fn QuadTree(comptime K: type, comptime getEntryAabb: fn (*anyopaque, K) AABB
 
             for (0..page.entries.len) |i| {
                 const entry = page.entries.buffer[i];
-                self.intersectingEntry(aabb, entry);
+                self.intersectingEntry(allocator, aabb, entry);
             }
 
-            self.intersectingForQuadrants(aabb, page);
+            self.intersectingForQuadrants(allocator, aabb, page);
         }
 
         const SubdivisionFieldEnum = std.meta.FieldEnum(Subdivision(AABB));
@@ -359,7 +382,12 @@ pub fn QuadTree(comptime K: type, comptime getEntryAabb: fn (*anyopaque, K) AABB
             }
         }
 
-        fn intersectingForQuadrants(self: *QT, aabb: AABB, page: *Page) void {
+        fn intersectingForQuadrants(
+            self: *QT,
+            allocator: Allocator,
+            aabb: AABB,
+            page: *Page,
+        ) void {
             // const zone = ztracy.ZoneN(@src(), "QT: Intersecting for Quadrants");
             // defer zone.End();
 
@@ -369,7 +397,7 @@ pub fn QuadTree(comptime K: type, comptime getEntryAabb: fn (*anyopaque, K) AABB
                 if (checkOrderIdx == i) {
                     inline for (quadrantCheckOrder[i]) |field| {
                         if (@field(page.quadrants, field)) |q| {
-                            self.intersectingForPage(aabb, q);
+                            self.intersectingForPage(allocator, aabb, q);
 
                             if (q.aabb.contains(aabb)) {
                                 return;
@@ -380,9 +408,13 @@ pub fn QuadTree(comptime K: type, comptime getEntryAabb: fn (*anyopaque, K) AABB
             }
         }
 
-        fn prepareToAddPages(self: *QT, numberOfPages: usize) void {
-            self.pages.resize(self.pages.items.len + numberOfPages) catch unreachable;
-            self.entries.resize(self.entries.items.len + numberOfPages * MAX_ENTRIES_IN_PAGE) catch unreachable;
+        fn prepareToAddPages(
+            self: *QT,
+            allocator: Allocator,
+            numberOfPages: usize,
+        ) void {
+            self.pages.resize(allocator, self.pages.items.len + numberOfPages) catch unreachable;
+            self.entries.resize(allocator, self.entries.items.len + numberOfPages * MAX_ENTRIES_IN_PAGE) catch unreachable;
         }
 
         fn addPagePrepared(self: *QT, boundary: AABB) *Page {
@@ -391,7 +423,7 @@ pub fn QuadTree(comptime K: type, comptime getEntryAabb: fn (*anyopaque, K) AABB
 
             self.pages.items[self.currentPagesIndex] = Page{
                 .aabb = boundary,
-                .entries = BoundedArray(usize, MAX_ENTRIES_IN_PAGE).init(0) catch unreachable,
+                .entries = .empty,
                 .offset = self.currentEntriesIndex,
             };
 

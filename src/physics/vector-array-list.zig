@@ -53,13 +53,13 @@ pub const VectorArrayList = struct {
         };
     }
 
-    pub fn deinit(self: *const VectorArrayList) void {
-        self.list.deinit();
+    pub fn deinit(self: *VectorArrayList) void {
+        self.list.deinit(self.allocator);
     }
 
     pub fn ensureCapacity(self: *VectorArrayList, capacity: usize, isPointersInvalidated: ?*bool) void {
         const prevPtr = self.list.items.ptr;
-        self.list.ensureTotalCapacity(elementsToNumberOfVectors(capacity)) catch unreachable;
+        self.list.ensureTotalCapacity(self.allocator, elementsToNumberOfVectors(capacity)) catch unreachable;
         self.list.expandToCapacity();
         const newPtr = self.list.items.ptr;
 

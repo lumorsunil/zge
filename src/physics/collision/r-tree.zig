@@ -37,16 +37,16 @@ const insertAlgorithm: RtreeInsertionAlgorithm = .star;
 ///
 /// const MyEntry = Entry(MyKey, MyValue, MyEntryExtension);
 /// ```
-pub fn Entry(comptime Key: type, comptime Value: type, comptime Extends: type) type {
-    return struct {
-        key: Key,
-        value: Value,
-
-        pub const KeyType = Key;
-
-        usingnamespace Extends;
-    };
-}
+// pub fn Entry(comptime Key: type, comptime Value: type, comptime Extends: type) type {
+//     return struct {
+//         key: Key,
+//         value: Value,
+//
+//         pub const KeyType = Key;
+//
+//         usingnamespace Extends;
+//     };
+// }
 
 /// EntryType must be of type `Entry(K, V, E)`
 pub fn RTree(
@@ -540,9 +540,9 @@ pub fn RTree(
             std.log.info("chooseSubtree {}", .{level});
             const nextPage =
                 if (insertAlgorithm == .linear)
-                Page.findMinAreaCost(page.children.items, nodeAabb).page
-            else
-                self.starInsertChoosePage(page, nodeAabb, level);
+                    Page.findMinAreaCost(page.children.items, nodeAabb).page
+                else
+                    self.starInsertChoosePage(page, nodeAabb, level);
 
             const splitNode = self.insertNodeInner(node, nodeAabb, nextPage, level + 1, targetLevel);
 

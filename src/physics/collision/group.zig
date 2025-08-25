@@ -7,7 +7,7 @@ pub const EntityGroup = struct {
 
     pub fn init(allocator: Allocator) EntityGroup {
         return EntityGroup{
-            .entities = std.AutoArrayHashMap(ecs.Entity, bool).init(allocator),
+            .entities = .init(allocator),
         };
     }
 
@@ -29,18 +29,18 @@ pub const CollisionEnabledFor = struct {
         };
     }
 
-    pub fn deinit(self: *CollisionEnabledFor) void {
+    pub fn deinit(self: *CollisionEnabledFor, allocator: Allocator) void {
         var it = self.groups.valueIterator();
         while (it.next()) |group| {
             group.deinit();
         }
         self.groups.deinit();
-        for (self.collisionsEnabledFor.values()) |item| {
-            item.deinit();
+        for (self.collisionsEnabledFor.values()) |*item| {
+            item.deinit(allocator);
         }
         self.collisionsEnabledFor.deinit();
-        for (self.collisionsEnabledForGroups.values()) |item| {
-            item.deinit();
+        for (self.collisionsEnabledForGroups.values()) |*item| {
+            item.deinit(allocator);
         }
         self.collisionsEnabledForGroups.deinit();
     }
@@ -59,11 +59,11 @@ pub const CollisionEnabledFor = struct {
         const cef = self.collisionsEnabledFor.getOrPut(entity) catch unreachable;
 
         if (!cef.found_existing) {
-            cef.value_ptr.* = std.ArrayList(*EntityGroup).init(allocator);
+            cef.value_ptr.* = .empty;
         }
 
         if (std.mem.indexOfScalar(*EntityGroup, cef.value_ptr.items, group) == null) {
-            cef.value_ptr.append(group) catch unreachable;
+            cef.value_ptr.append(allocator, group) catch unreachable;
         }
     }
 
@@ -89,11 +89,11 @@ pub const CollisionEnabledFor = struct {
         const cef = self.collisionsEnabledForGroups.getOrPut(groupAKey) catch unreachable;
 
         if (!cef.found_existing) {
-            cef.value_ptr.* = std.ArrayList(*[]const u8).init(allocator);
+            cef.value_ptr.* = .empty;
         }
 
         if (std.mem.indexOfScalar(*[]const u8, cef.value_ptr.items, groupBKeyPtr) == null) {
-            cef.value_ptr.append(groupBKeyPtr) catch unreachable;
+            cef.value_ptr.append(allocator, groupBKeyPtr) catch unreachable;
         }
     }
 
@@ -132,7 +132,7 @@ pub const CollisionEnabledFor = struct {
         };
         const addedToGroup = group.entities.getOrPut(entity) catch unreachable;
         if (addedToGroup.found_existing) {
-            std.log.warn("Entity {d} already added to group: {s}", .{ entity, groupKey });
+            std.log.warn("Entity {} already added to group: {s}", .{ entity, groupKey });
         }
 
         const cef = self.collisionsEnabledForGroups.getPtr(groupKey) orelse return;
@@ -144,6 +144,7 @@ pub const CollisionEnabledFor = struct {
 
     pub fn removeFromGroup(
         self: *CollisionEnabledFor,
+        allocator: Allocator,
         entity: ecs.Entity,
         groupKey: []const u8,
     ) void {
@@ -152,19 +153,20 @@ pub const CollisionEnabledFor = struct {
             return;
         };
         _ = group.entities.swapRemove(entity);
-        const r = self.collisionsEnabledFor.fetchSwapRemove(entity) orelse return;
-        r.value.deinit();
+        var r = self.collisionsEnabledFor.fetchSwapRemove(entity) orelse return;
+        r.value.deinit(allocator);
     }
 
     pub fn removeFromAllGroups(
         self: *CollisionEnabledFor,
+        allocator: Allocator,
         entity: ecs.Entity,
     ) void {
         var it = self.groups.valueIterator();
         while (it.next()) |group| {
             _ = group.entities.swapRemove(entity);
         }
-        const r = self.collisionsEnabledFor.fetchSwapRemove(entity) orelse return;
-        r.value.deinit();
+        var r = self.collisionsEnabledFor.fetchSwapRemove(entity) orelse return;
+        r.value.deinit(allocator);
     }
 };

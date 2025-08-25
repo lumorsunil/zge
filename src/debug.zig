@@ -50,7 +50,7 @@ pub const DebugScene = struct {
             .allocator = allocator,
             .reg = reg,
             .rand = std.Random.DefaultPrng.init(0),
-            .player = 0,
+            .player = undefined,
 
             .screen = &screen,
             .physicsSystem = PhysicsSystem.init(allocator, reg, boundary),
@@ -59,16 +59,17 @@ pub const DebugScene = struct {
     }
 
     pub fn bind(self: *DebugScene) void {
+        const allocator = self.allocator;
         self.drawSystem.bind();
         self.physicsSystem.collisionGroups.createGroup(self.allocator, "player");
         self.physicsSystem.collisionGroups.createGroup(self.allocator, "rectangles");
         self.physicsSystem.collisionGroups.createGroup(self.allocator, "circles");
-        self.physicsSystem.collisionGroups.enableCollisionsForGroup(self.allocator, "player", "rectangles");
-        self.physicsSystem.collisionGroups.enableCollisionsForGroup(self.allocator, "rectangles", "circles");
+        self.physicsSystem.collisionGroups.enableCollisionsForGroup(allocator, "player", "rectangles");
+        self.physicsSystem.collisionGroups.enableCollisionsForGroup(allocator, "rectangles", "circles");
     }
 
     pub fn deinit(self: *DebugScene) void {
-        self.physicsSystem.deinit();
+        self.physicsSystem.deinit(self.allocator);
         self.drawSystem.deinit();
     }
 

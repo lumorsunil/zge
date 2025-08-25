@@ -5,12 +5,12 @@
     .minimum_zig_version = "0.14.1",
     .dependencies = .{
         .raylib_zig = .{
-            .url = "git+https://github.com/Not-Nik/raylib-zig#3bf08a304cfe2baf839705063ff999b8d8bc8c54",
-            .hash = "raylib_zig-5.6.0-dev-KE8REKAqBQAQugfCOjYYVRFOi7iaEJK1EMDcRUq8AOm2",
+            .url = "git+https://github.com/raylib-zig/raylib-zig#178530d5f5e654d9eb1d7a79e3fbfbd931e26163",
+            .hash = "raylib_zig-5.6.0-dev-KE8REKo6BQDt6jBeo3ODV5g9kzo2IRfJARkaN0kXtC2T",
         },
         .entt = .{
-            .url = "git+https://github.com/prime31/zig-ecs#5128295bdeb2f253217dd0c6f665487d95f061a3",
-            .hash = "entt-1.0.0-qJPtbD-oAgCEwd68KlDxWkJiIIRSEmDl1j8K_KcXSJ6v",
+            .url = "git+https://github.com/prime31/zig-ecs#1616fe6b750f7a62684ac955471f1357ceeb08d3",
+            .hash = "entt-1.0.0-qJPtbLvWAgA7zKldpRMGFZJtdyCpmMekcT8T7dF1w5Wt",
         },
     },
     .paths = .{

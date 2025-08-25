@@ -54,7 +54,7 @@ pub const DrawSystem = struct {
 
     pub fn deinit(self: *DrawSystem) void {
         self.unbind();
-        self.drawOrderList.deinit();
+        self.drawOrderList.deinit(self.allocator);
     }
 
     /// This needs to be called as part of initialization
@@ -164,7 +164,7 @@ pub const DrawSystem = struct {
         }
     }
 
-    fn drawPageQT(self: *DrawSystem, maybePage: ?*CollisionContainer.QT.Page, level: usize) void {
+    fn drawPageQT(self: *DrawSystem, maybePage: ?*CollisionContainer.Tree.Page, level: usize) void {
         if (maybePage == null) return;
         const page = maybePage.?;
 
@@ -221,12 +221,17 @@ pub const DrawSystem = struct {
         return (layerA.z == layerB.z and layerA.subZ < layerB.subZ) or layerA.z < layerB.z;
     }
 
-    fn ensureDrawOrderCapacity(self: *DrawSystem, reg: *ecs.Registry, entity: ecs.Entity) void {
+    fn ensureDrawOrderCapacity(
+        self: *DrawSystem,
+        reg: *ecs.Registry,
+        entity: ecs.Entity,
+    ) void {
         _ = entity;
         _ = reg;
+        const allocator = self.allocator;
 
         self.drawOrderList.clearRetainingCapacity();
-        self.drawOrderList.ensureTotalCapacity(self.layerView.len()) catch unreachable;
+        self.drawOrderList.ensureTotalCapacity(allocator, self.layerView.len()) catch unreachable;
         self.drawOrderList.expandToCapacity();
     }
 

@@ -39,8 +39,12 @@ pub fn main() !void {
 
     var lastSample: f64 = 0;
 
-    const stdout = std.io.getStdOut().writer();
+    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
+
     try stdout.print("starting game\n", .{});
+    try stdout.flush();
 
     while (!rl.windowShouldClose()) {
         const dt = rl.getFrameTime();
@@ -53,5 +57,7 @@ pub fn main() !void {
 
         scene.update(dt, t);
         scene.draw();
+
+        try stdout.flush();
     }
 }

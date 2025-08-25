@@ -44,11 +44,11 @@ pub const RigidBodyContainer = struct {
         return c;
     }
 
-    pub fn deinit(self: *const RigidBodyContainer) void {
+    pub fn deinit(self: *RigidBodyContainer) void {
         self.deinitRigidBodies();
     }
 
-    fn deinitRigidBodies(self: *const RigidBodyContainer) void {
+    fn deinitRigidBodies(self: *RigidBodyContainer) void {
         self.rigidBodiesDynamic.deinit();
         self.rigidBodiesPositionX.deinit();
         self.rigidBodiesPositionY.deinit();
@@ -62,16 +62,17 @@ pub const RigidBodyContainer = struct {
     }
 
     fn initRigidBodies(self: *RigidBodyContainer) void {
-        self.rigidBodiesDynamic = VectorArrayList.initCapacity(self.allocator, self.rigidBodiesCapacity);
-        self.rigidBodiesPositionX = VectorArrayList.initCapacity(self.allocator, self.rigidBodiesCapacity);
-        self.rigidBodiesPositionY = VectorArrayList.initCapacity(self.allocator, self.rigidBodiesCapacity);
-        self.rigidBodiesVelocityX = VectorArrayList.initCapacity(self.allocator, self.rigidBodiesCapacity);
-        self.rigidBodiesVelocityY = VectorArrayList.initCapacity(self.allocator, self.rigidBodiesCapacity);
-        self.rigidBodiesAccelerationX = VectorArrayList.initCapacity(self.allocator, self.rigidBodiesCapacity);
-        self.rigidBodiesAccelerationY = VectorArrayList.initCapacity(self.allocator, self.rigidBodiesCapacity);
-        self.rigidBodiesRotation = VectorArrayList.initCapacity(self.allocator, self.rigidBodiesCapacity);
-        self.rigidBodiesRotationalVelocity = VectorArrayList.initCapacity(self.allocator, self.rigidBodiesCapacity);
-        self.rigidBodiesRotationalAcceleration = VectorArrayList.initCapacity(self.allocator, self.rigidBodiesCapacity);
+        const allocator = self.allocator;
+        self.rigidBodiesDynamic = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
+        self.rigidBodiesPositionX = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
+        self.rigidBodiesPositionY = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
+        self.rigidBodiesVelocityX = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
+        self.rigidBodiesVelocityY = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
+        self.rigidBodiesAccelerationX = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
+        self.rigidBodiesAccelerationY = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
+        self.rigidBodiesRotation = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
+        self.rigidBodiesRotationalVelocity = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
+        self.rigidBodiesRotationalAcceleration = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
     }
 
     fn ensureAndExpandRigidBodyCapacity(self: *RigidBodyContainer) void {

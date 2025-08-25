@@ -85,12 +85,12 @@ pub const PhysicsSystem = struct {
         };
     }
 
-    pub fn deinit(self: *PhysicsSystem) void {
+    pub fn deinit(self: *PhysicsSystem, allocator: Allocator) void {
         self.bodyContainer.deinit();
         self.collisionContainer.deinit();
-        self.sweepLineBuffer.deinit();
-        self.overlappingBuffer.deinit();
-        self.collisionGroups.deinit();
+        self.sweepLineBuffer.deinit(allocator);
+        self.overlappingBuffer.deinit(allocator);
+        self.collisionGroups.deinit(allocator);
     }
 
     pub fn numberOfTimeSteps(self: PhysicsSystem, dt: f32, maxTimeStep: f32) f32 {
@@ -366,7 +366,7 @@ pub const PhysicsSystem = struct {
         options: AddRigidBodyOptions,
         static: RigidBodyStaticParams,
     ) *RigidBody {
-        const entityId = self.reg.entityId(entity);
+        const entityId = entity.index;
         var isPointersInvalidated: bool = false;
 
         self.bodyContainer.setRigidBody(
@@ -403,12 +403,12 @@ pub const PhysicsSystem = struct {
         return body;
     }
 
-    pub fn removeRigidBody(self: *PhysicsSystem, entity: ecs.Entity) void {
+    pub fn removeRigidBody(self: *PhysicsSystem, allocator: Allocator, entity: ecs.Entity) void {
         if (collisionType == .rTree) {
             self.collisionContainer.removeBody(entity);
         }
-        self.bodyContainer.removeRigidBody(self.reg.entityId(entity));
-        self.collisionGroups.removeFromAllGroups(entity);
+        self.bodyContainer.removeRigidBody(entity.index);
+        self.collisionGroups.removeFromAllGroups(allocator, entity);
         self.reg.remove(RigidBody, entity);
     }
 
@@ -417,7 +417,7 @@ pub const PhysicsSystem = struct {
 
         for (view.data()) |entity| {
             const body = view.get(entity);
-            const id = self.reg.entityId(entity);
+            const id = entity.index;
             self.bodyContainer.updateRigidBodyPointers(id, &body.d);
         }
     }
