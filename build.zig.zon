@@ -2,7 +2,7 @@
     .name = .zge,
     .version = "0.0.0",
     .fingerprint = 0xb1435c23392642a1, // Changing this has security and trust implications.
-    .minimum_zig_version = "0.14.1",
+    .minimum_zig_version = "0.15.1",
     .dependencies = .{
         .raylib_zig = .{
             .url = "git+https://github.com/raylib-zig/raylib-zig#178530d5f5e654d9eb1d7a79e3fbfbd931e26163",
