@@ -1,4 +1,5 @@
 const std = @import("std");
+const rl = @import("raylib");
 // const ztracy = @import("ztracy");
 
 const V = @import("../vector.zig").V;
@@ -227,6 +228,17 @@ pub const AABB = struct {
         };
     }
 
+    pub fn scaleV(self: AABB, v: Vector) AABB {
+        const expansion = self.size() * (v / V.scalar(2));
+        const c = self.center();
+
+        return AABB{
+            .tl = c - expansion,
+            .br = c + expansion,
+            .isMinimal = self.isMinimal,
+        };
+    }
+
     pub fn scale(self: AABB, s: f32) AABB {
         const expansion = self.size() * V.scalar(s / 2);
         const c = self.center();
@@ -258,6 +270,10 @@ pub const AABB = struct {
             .br = c + expansion,
             .isMinimal = self.isMinimal,
         };
+    }
+
+    pub fn toRaylib(self: AABB) rl.Rectangle {
+        return .{ .x = V.x(self.tl), .y = V.y(self.tl), .width = self.width(), .height = self.height() };
     }
 };
 
