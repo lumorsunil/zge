@@ -28,7 +28,7 @@ pub const AABB = struct {
     }
 
     pub fn fromRadius(radius: f32, isMinimal: bool) AABB {
-        return AABB{
+        return .{
             .tl = V.all(-radius),
             .br = V.all(radius),
             .isMinimal = isMinimal,
@@ -38,9 +38,17 @@ pub const AABB = struct {
     pub fn fromCenter(center_: Vector, size_: Vector, isMinimal: bool) AABB {
         const halfSize = size_ * V.scalar(0.5);
 
-        return AABB{
+        return .{
             .tl = center_ - halfSize,
             .br = center_ + halfSize,
+            .isMinimal = isMinimal,
+        };
+    }
+
+    pub fn fromTopLeft(topLeft: Vector, size_: Vector, isMinimal: bool) AABB {
+        return .{
+            .tl = topLeft,
+            .br = topLeft + size_,
             .isMinimal = isMinimal,
         };
     }

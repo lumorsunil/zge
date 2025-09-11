@@ -166,6 +166,13 @@ pub const V = struct {
         const d = u - v;
         return std.math.atan2(V.y(d), V.x(d));
     }
+
+    pub fn polar(magnitude: f32, angle: f32) Vector {
+        return V.init(
+            @cos(angle) * magnitude,
+            @sin(angle) * magnitude,
+        );
+    }
 };
 
 pub const PVector = VectorGeneric(*f32);
