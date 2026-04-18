@@ -2,6 +2,7 @@ const std = @import("std");
 const ztracy = @import("ztracy");
 
 const AABB = @import("../shape.zig").AABB;
+const V = @import("../../vector.zig").V;
 
 // TODO: Add a feature that divides the plane into rectangles with infinite width and a fixed height,
 // the height should not be less than the greatest height of any one body, so that each body can only be
@@ -41,18 +42,37 @@ pub const SweepLine = union(enum) {
     }
 };
 
+pub const SweepLineByAABB = union(enum) {
+    min: Unit,
+    max: Unit,
+
+    pub const Unit = struct {
+        index: usize,
+        value: f32,
+        isEntry: bool,
+    };
+
+    pub fn value(self: SweepLineByAABB) f32 {
+        return switch (self) {
+            .min => |min| min.value,
+            .max => |max| max.value,
+        };
+    }
+};
+
 pub fn sweep(
     comptime T: type,
-    source: []T,
+    source: []const T,
     buffer: []SweepLine,
     overlappingBuffer: []bool,
     context: anytype,
-    onAxisOverlap: fn (@TypeOf(context), a: usize, bs: []bool, n: usize) void,
+    getAabb: fn (@TypeOf(context), source: T) AABB,
+    onAxisOverlap: fn (@TypeOf(context), a: usize, bs: []bool, n: usize, source: []const T) void,
 ) void {
     const zone = ztracy.ZoneNC(@src(), "sweep", 0xff_00_f0_f0);
     defer zone.End();
-    const sortedSweepLines = copySweepLines(T, .x, source, buffer);
-    std.mem.sort(SweepLine, sortedSweepLines, {}, minValue);
+    const sortedSweepLines = copySweepLines(T, .x, source, buffer, context, getAabb);
+    std.mem.sort(SweepLine, sortedSweepLines, {}, minValue(SweepLine, SweepLine.value));
     const overlappingBufferX = overlappingBuffer[0..source.len];
     const overlappingBufferY = overlappingBuffer[source.len .. source.len * 2];
 
@@ -74,10 +94,11 @@ pub fn sweep(
                             overlappingBufferX,
                             overlappingBufferY,
                             context,
+                            getAabb,
                             onAxisOverlap,
                         );
                     } else {
-                        onAxisOverlap(context, min.index, overlappingBufferX, overlapsX);
+                        onAxisOverlap(context, min.index, overlappingBufferX, overlapsX, source);
                     }
                 }
 
@@ -92,14 +113,69 @@ pub fn sweep(
     }
 }
 
+pub fn sweepByAABB(
+    comptime T: type,
+    entry: AABB,
+    source: []const T,
+    buffer: []SweepLineByAABB,
+    overlappingBuffer: []bool,
+    context: anytype,
+    getAabb: fn (@TypeOf(context), source: T) AABB,
+    onAxisOverlap: fn (@TypeOf(context), entry: AABB, bs: []bool, n: usize, source: []const T) void,
+) void {
+    const zone = ztracy.ZoneNC(@src(), "sweepByAABB", 0xff_00_f0_f0);
+    defer zone.End();
+
+    const sortedSweepLines = copySweepLinesByAabb(T, .x, entry, source, buffer, context, getAabb);
+    std.mem.sort(SweepLineByAABB, sortedSweepLines, {}, minValue(SweepLineByAABB, SweepLineByAABB.value));
+    const overlappingBufferX = overlappingBuffer[0..source.len];
+    // const overlappingBufferY = overlappingBuffer[source.len .. source.len * 2];
+
+    @memset(overlappingBufferX, false);
+
+    var overlapsX: usize = 0;
+    var isEntryOverlapping = false;
+
+    for (sortedSweepLines) |line| {
+        switch (line) {
+            .min => |min| {
+                if (min.isEntry) {
+                    isEntryOverlapping = true;
+                } else {
+                    overlappingBufferX[min.index] = true;
+                    overlapsX += 1;
+                }
+
+                if (overlapsX > 0 and isEntryOverlapping) {
+                    onAxisOverlap(context, entry, overlappingBufferX, overlapsX, source);
+
+                    if (min.isEntry) continue;
+
+                    overlappingBufferX[min.index] = false;
+                    overlapsX -= 1;
+                }
+            },
+            .max => |max| {
+                if (max.isEntry) return;
+
+                if (overlappingBufferX[max.index]) {
+                    overlappingBufferX[max.index] = false;
+                    overlapsX -= 1;
+                }
+            },
+        }
+    }
+}
+
 fn sweepY(
     comptime T: type,
     index: usize,
-    source: []T,
+    source: []const T,
     overlappingBufferX: []bool,
     overlappingBufferY: []bool,
     context: anytype,
-    onAxisOverlap: fn (context: @TypeOf(context), a: usize, bs: []bool, n: usize) void,
+    getAabb: fn (@TypeOf(context), source: T) AABB,
+    onAxisOverlap: fn (context: @TypeOf(context), a: usize, bs: []bool, n: usize, source: []const T) void,
 ) void {
     const zone = ztracy.ZoneNC(@src(), "sweepY", 0xff_00_f0_f0);
     defer zone.End();
@@ -110,13 +186,14 @@ fn sweepY(
     for (0..overlappingBufferX.len) |j| {
         if (!overlappingBufferX[j]) continue;
 
-        copySweepLine(T, .y, n, source[j], &smallBuffer);
+        const aabb = getAabb(context, source[j]);
+        copySweepLine(.y, n, aabb, &smallBuffer);
         n += 1;
 
         //onAxisOverlap(context, min.index, j);
     }
     const sortedSmallBuffer = smallBuffer[0..n];
-    std.mem.sort(SweepLine, sortedSmallBuffer, {}, minValue);
+    std.mem.sort(SweepLine, sortedSmallBuffer, {}, minValue(SweepLine, SweepLine.value));
 
     for (0..overlappingBufferY.len) |i| {
         overlappingBufferY[i] = false;
@@ -128,7 +205,7 @@ fn sweepY(
         switch (otherAxisLine) {
             .min => |minY| {
                 if (overlapsY > 0) {
-                    onAxisOverlap(context, index, overlappingBufferY, overlapsY);
+                    onAxisOverlap(context, index, overlappingBufferY, overlapsY, source);
                 }
 
                 overlappingBufferY[minY.index] = true;
@@ -142,31 +219,69 @@ fn sweepY(
     }
 }
 
-fn copySweepLines(comptime T: type, comptime axis: Axis, source: []T, buffer: []SweepLine) []SweepLine {
+fn copySweepLines(
+    comptime T: type,
+    comptime axis: Axis,
+    source: []const T,
+    buffer: []SweepLine,
+    context: anytype,
+    getAabb: fn (@TypeOf(context), source: T) AABB,
+) []SweepLine {
     const zone = ztracy.ZoneNC(@src(), "copy sweep lines", 0xff_00_f0_f0);
     defer zone.End();
 
     for (0.., source) |i, s| {
-        copySweepLine(T, axis, i, s, buffer);
+        const aabb = getAabb(context, s);
+        copySweepLine(axis, i, aabb, buffer);
     }
 
     return buffer[0 .. source.len * 2];
 }
 
-fn copySweepLine(comptime T: type, comptime axis: Axis, index: usize, source: T, buffer: []SweepLine) void {
+fn copySweepLinesByAabb(
+    comptime T: type,
+    comptime axis: Axis,
+    entry: AABB,
+    source: []const T,
+    buffer: []SweepLineByAABB,
+    context: anytype,
+    getAabb: fn (@TypeOf(context), source: T) AABB,
+) []SweepLineByAABB {
+    const zone = ztracy.ZoneNC(@src(), "copy sweep lines", 0xff_00_f0_f0);
+    defer zone.End();
+
+    for (0.., source) |i, s| {
+        const aabb = getAabb(context, s);
+        copySweepLineByAabb(axis, i, aabb, false, buffer);
+    }
+
+    copySweepLineByAabb(axis, source.len, entry, true, buffer);
+
+    return buffer[0 .. source.len * 2 + 2];
+}
+
+fn copySweepLineByAabb(
+    comptime axis: Axis,
+    index: usize,
+    aabb: AABB,
+    isEntry: bool,
+    buffer: []SweepLineByAABB,
+) void {
     const zone = ztracy.ZoneNC(@src(), "copy sweep line", 0xff_00_f0_f0);
     defer zone.End();
 
-    const min = SweepLine{
+    const min = SweepLineByAABB{
         .min = .{
             .index = index,
-            .value = if (axis == .x) source.aabb.tl.x else source.aabb.tl.y,
+            .value = if (axis == .x) aabb.left() else aabb.top(),
+            .isEntry = isEntry,
         },
     };
-    const max = SweepLine{
+    const max = SweepLineByAABB{
         .max = .{
             .index = index,
-            .value = if (axis == .x) source.aabb.br.x else source.aabb.br.y,
+            .value = if (axis == .x) aabb.right() else aabb.bottom(),
+            .isEntry = isEntry,
         },
     };
 
@@ -175,6 +290,37 @@ fn copySweepLine(comptime T: type, comptime axis: Axis, index: usize, source: T,
     buffer[j + 1] = max;
 }
 
-fn minValue(_: void, lhs: SweepLine, rhs: SweepLine) bool {
-    return lhs.value() < rhs.value();
+fn copySweepLine(
+    comptime axis: Axis,
+    index: usize,
+    aabb: AABB,
+    buffer: []SweepLine,
+) void {
+    const zone = ztracy.ZoneNC(@src(), "copy sweep line", 0xff_00_f0_f0);
+    defer zone.End();
+
+    const min = SweepLine{
+        .min = .{
+            .index = index,
+            .value = if (axis == .x) aabb.left() else aabb.top(),
+        },
+    };
+    const max = SweepLine{
+        .max = .{
+            .index = index,
+            .value = if (axis == .x) aabb.right() else aabb.bottom(),
+        },
+    };
+
+    const j = index * 2;
+    buffer[j] = min;
+    buffer[j + 1] = max;
+}
+
+fn minValue(comptime T: type, getValue: *const fn (T) f32) fn (void, T, T) bool {
+    return struct {
+        pub fn minValue(_: void, lhs: T, rhs: T) bool {
+            return getValue(lhs) < getValue(rhs);
+        }
+    }.minValue;
 }

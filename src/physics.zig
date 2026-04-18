@@ -3,7 +3,8 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const rl = @import("raylib");
 const ecs = @import("ecs");
-// const ztracy = @import("ztracy");
+const ztracy = @import("ztracy");
+const isTracingEnabled = @import("config.zig").isTracingEnabled;
 
 const cfg = @import("config.zig");
 
@@ -73,7 +74,7 @@ pub const PhysicsSystem = struct {
             .groundFriction = 0.9,
             .view = reg.basicView(RigidBody),
             .reg = reg,
-            .bodyContainer = RigidBodyContainer.init(allocator),
+            .bodyContainer = .init(allocator),
             .collisionContainer = ccPtr,
 
             .sweepLineBuffer = ArrayList(SweepLine).initCapacity(allocator, 100) catch unreachable,
@@ -81,7 +82,7 @@ pub const PhysicsSystem = struct {
 
             .boundary = boundary,
 
-            .collisionGroups = CollisionEnabledFor.init(allocator),
+            .collisionGroups = .empty,
         };
     }
 
@@ -94,13 +95,13 @@ pub const PhysicsSystem = struct {
     }
 
     pub fn numberOfTimeSteps(self: PhysicsSystem, dt: f32, maxTimeStep: f32) f32 {
-        _ = self; // autofix
+        _ = self;
         return dt / maxTimeStep;
     }
 
     pub fn update(self: *PhysicsSystem, dt: f32) void {
-        // const zone = ztracy.ZoneNC(@src(), "physics upate", 0xff_00_00_00);
-        // defer zone.End();
+        const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneNC(@src(), "physics upate", 0xff_00_00_00) else null;
+        defer if (zone) |z| z.End();
 
         const intervalTimeStep = dt / PHYSICS_SUB_STEPS;
 
@@ -111,9 +112,9 @@ pub const PhysicsSystem = struct {
 
         self.bodyContainer.startPhysicsFrame(self.gravity);
 
-        for (0..PHYSICS_SUB_STEPS) |_| {
+        for (0..PHYSICS_SUB_STEPS) |subStep| {
             self.updatePositions(intervalTimeStep);
-            self.updateCollisions();
+            self.updateCollisions(subStep);
             self.resolveCollisions();
         }
 
@@ -121,8 +122,8 @@ pub const PhysicsSystem = struct {
     }
 
     pub fn updateDynamicSubSteps(self: *PhysicsSystem, dt: f32, maxTimeStep: f32) void {
-        // const zone = ztracy.ZoneNC(@src(), "physics upate", 0xff_00_00_00);
-        // defer zone.End();
+        const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneNC(@src(), "physics upate", 0xff_00_00_00) else null;
+        defer if (zone) |z| z.End();
 
         const timeStep = @min(dt, maxTimeStep);
 
@@ -141,8 +142,8 @@ pub const PhysicsSystem = struct {
     }
 
     fn updatePositions(self: *PhysicsSystem, dt: f32) void {
-        // const zone = ztracy.ZoneNC(@src(), "update positions", 0xff_00_00_00);
-        // defer zone.End();
+        const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneNC(@src(), "update positions", 0xff_00_00_00) else null;
+        defer if (zone) |z| z.End();
 
         self.bodyContainer.updatePositions(dt);
 
@@ -199,9 +200,9 @@ pub const PhysicsSystem = struct {
         }
     }
 
-    fn updateCollisions(self: *PhysicsSystem) void {
-        // const zone = ztracy.ZoneNC(@src(), "update collisions", 0xff_00_00_00);
-        // defer zone.End();
+    fn updateCollisions(self: *PhysicsSystem, subStep: usize) void {
+        const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneNC(@src(), "update collisions", 0xff_00_00_00) else null;
+        defer if (zone) |z| z.End();
 
         // const bodies = self.view.raw();
 
@@ -213,22 +214,31 @@ pub const PhysicsSystem = struct {
             .bruteForce => self.updateCollisionsBruteForce(),
             .rTree => self.updateCollisionsWithContainer(),
             .sweep => self.updateCollisionSweep(),
-            .quadTree => self.updateCollisionsWithContainerQT(),
+            .quadTree => self.updateCollisionsWithContainerQT(
+                if (subStep == 0)
+                    .build(self.boundary)
+                else
+                    .check,
+                // .build(self.boundary),
+            ),
         }
     }
 
     fn updateCollisionsWithContainer(self: *PhysicsSystem) void {
         for (self.view.data()) |entity| {
-            // const zone = ztracy.ZoneN(@src(), "uc entity");
-            // defer zone.End();
+            const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneN(@src(), "uc entity") else null;
+            defer if (zone) |z| z.End();
             const body = self.view.get(entity);
             if (body.s.isStatic) continue;
             self.collisionContainer.checkCollision(body, entity, self, emitCollisionEvent);
         }
     }
 
-    fn updateCollisionsWithContainerQT(self: *PhysicsSystem) void {
-        const collisions = self.collisionContainer.checkCollisionsQT(self.boundary);
+    fn updateCollisionsWithContainerQT(
+        self: *PhysicsSystem,
+        options: CollisionContainer.CheckCollisionQTOptions,
+    ) void {
+        const collisions = self.collisionContainer.checkCollisionsQT(options);
 
         for (collisions) |collision| {
             self.emitCollisionEvent(collision);
@@ -237,9 +247,10 @@ pub const PhysicsSystem = struct {
 
     fn updateCollisionSweep(self: *PhysicsSystem) void {
         const bodies = self.view.raw();
-        self.sweepLineBuffer.ensureTotalCapacityPrecise(bodies.len * 2) catch unreachable;
+        const allocator = self.reg.singletons().getConst(Allocator);
+        self.sweepLineBuffer.ensureTotalCapacityPrecise(allocator, bodies.len * 2) catch unreachable;
         self.sweepLineBuffer.expandToCapacity();
-        self.overlappingBuffer.ensureTotalCapacityPrecise(bodies.len * 2) catch unreachable;
+        self.overlappingBuffer.ensureTotalCapacityPrecise(allocator, bodies.len * 2) catch unreachable;
         self.overlappingBuffer.expandToCapacity();
 
         sweep(
@@ -248,11 +259,16 @@ pub const PhysicsSystem = struct {
             self.sweepLineBuffer.items,
             self.overlappingBuffer.items,
             self,
+            getAabb,
             onAxisOverlap,
         );
     }
 
-    fn onAxisOverlap(self: *PhysicsSystem, a: usize, bs: []bool, n: usize) void {
+    fn getAabb(_: *PhysicsSystem, entry: RigidBody) AABB {
+        return entry.aabb;
+    }
+
+    fn onAxisOverlap(self: *PhysicsSystem, a: usize, bs: []bool, n: usize, _: []const RigidBody) void {
         const bodyA = &self.view.raw()[a];
         var left = n;
 
@@ -297,8 +313,8 @@ pub const PhysicsSystem = struct {
     }
 
     fn resolveCollisions(self: *PhysicsSystem) void {
-        // const zone = ztracy.ZoneNC(@src(), "resolve collisions", 0xff_00_00_00);
-        // defer zone.End();
+        const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneNC(@src(), "resolve collisions", 0xff_00_00_00) else null;
+        defer if (zone) |z| z.End();
 
         for (self.collisionEvents[numberOfResolvedCollisions..numberOfCollisionEvents]) |*collision| {
             if (self.collisionGroups.isCollisionEnabledFor(collision.bodyA.key, collision.bodyB.key)) {
@@ -353,6 +369,15 @@ pub const PhysicsSystem = struct {
         circle.offset = offset;
         circle.updateTransform(V.zero, 0, 1);
         return self.collisionContainer.intersectingCircle(circle);
+    }
+
+    /// Result is owned by caller
+    pub fn findIntersectionsLine(
+        self: PhysicsSystem,
+        start: Vector,
+        end: Vector,
+    ) []Intersection(ecs.Entity) {
+        return self.collisionContainer.intersectingLine(start, end);
     }
 
     const AddRigidBodyOptions = struct {

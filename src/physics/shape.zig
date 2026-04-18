@@ -1,6 +1,7 @@
 const std = @import("std");
 const rl = @import("raylib");
-// const ztracy = @import("ztracy");
+const ztracy = @import("ztracy");
+const isTracingEnabled = @import("../config.zig").isTracingEnabled;
 
 const V = @import("../vector.zig").V;
 const Vector = @import("../vector.zig").Vector;
@@ -17,13 +18,8 @@ pub const AABB = struct {
 
     pub fn format(
         value: AABB,
-        comptime fmt: []const u8,
-        options: std.fmt.FormatOptions,
         writer: anytype,
     ) !void {
-        _ = options;
-        _ = fmt;
-
         try writer.print("{{{};{}}}", .{ value.tl, value.br });
     }
 
@@ -64,8 +60,8 @@ pub const AABB = struct {
     }
 
     pub fn intersects(self: AABB, other: AABB) bool {
-        // const zone = ztracy.ZoneNC(@src(), "AABB: intersects", 0xff_ff_ff_00);
-        // defer zone.End();
+        const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneNC(@src(), "AABB: intersects", 0xff_ff_ff_00) else null;
+        defer if (zone) |z| z.End();
 
         return @reduce(.And, self.br > other.tl) and
             @reduce(.And, other.br > self.tl);
@@ -83,9 +79,17 @@ pub const AABB = struct {
         return lessThan(self.tl, other.tl) and greaterThan(self.br, other.br);
     }
 
+    pub fn containsPoint(self: AABB, point: Vector) bool {
+        return lessThan(self.tl, point) and greaterThan(self.br, point);
+    }
+
+    pub fn containsLine(self: AABB, start: Vector, end: Vector) bool {
+        return self.containsPoint(start) and self.containsPoint(end);
+    }
+
     pub fn intersection(self: AABB, other: AABB) ?Intersection {
-        // const zone = ztracy.ZoneNC(@src(), "AABB: intersection", 0xff_ff_ff_00);
-        // defer zone.End();
+        const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneNC(@src(), "AABB: intersection", 0xff_ff_ff_00) else null;
+        defer if (zone) |z| z.End();
 
         const maxTl = @max(self.tl, other.tl);
         const minBr = @min(self.br, other.br);

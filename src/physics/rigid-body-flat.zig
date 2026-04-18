@@ -1,4 +1,5 @@
-// const ztracy = @import("ztracy");
+const ztracy = @import("ztracy");
+const isTracingEnabled = @import("../config.zig").isTracingEnabled;
 const ecs = @import("ecs");
 
 const V = @import("../vector.zig").V;
@@ -59,8 +60,8 @@ pub const RigidBodyFlat = struct {
     }
 
     pub fn checkCollision(self: *RigidBodyFlat, other: *RigidBodyFlat) CollisionResult {
-        // const zone = ztracy.ZoneNC(@src(), "check collision", 0x00_ff_ff_00);
-        // defer zone.End();
+        const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneNC(@src(), "check collision", 0x00_ff_ff_00) else null;
+        defer if (zone) |z| z.End();
         return col.checkCollision(self, other);
     }
 
@@ -75,12 +76,14 @@ pub const RigidBodyFlat = struct {
     }
 
     pub fn applyForce(self: *RigidBodyFlat, force: Vector) void {
+        if (self.s.isStatic) return;
         const mass = self.s.mass();
         const acc = force / V.scalar(mass);
         V.setP(self.d.a, V.fromP(self.d.a) + acc);
     }
 
     pub fn applyImpulse(self: *RigidBodyFlat, impulse: Vector) void {
+        if (self.s.isStatic) return;
         const mass = self.s.mass();
         const vel = impulse / V.scalar(mass);
         V.setP(self.d.v, V.fromP(self.d.v) + vel);

@@ -66,6 +66,7 @@ pub const DebugScene = struct {
         self.physicsSystem.collisionGroups.createGroup(self.allocator, "circles");
         self.physicsSystem.collisionGroups.enableCollisionsForGroup(allocator, "player", "rectangles");
         self.physicsSystem.collisionGroups.enableCollisionsForGroup(allocator, "rectangles", "circles");
+        self.physicsSystem.collisionGroups.enableCollisionsForGroup(allocator, "rectangles", "rectangles");
     }
 
     pub fn deinit(self: *DebugScene) void {
@@ -87,7 +88,9 @@ pub const DebugScene = struct {
 
     const maxRadius = 10 + 2;
     pub fn randomRadius(self: *DebugScene) f32 {
-        return 10 + 5 * self.rand.random().float(f32);
+        _ = self; // autofix
+        // return 10 + 5 * self.rand.random().float(f32);
+        return 1;
     }
 
     pub fn addRandomCircle(self: *DebugScene) void {
@@ -253,25 +256,29 @@ pub const DebugScene = struct {
         _ = collisions;
     }
 
+    // const MAX_BODIES = 202;
+
     fn addBodiesUntilLag(self: *DebugScene, dt: f32) void {
+        // if (bodiesAdded >= MAX_BODIES) return;
+
         if (dt < 0.017) {
             //if (bodiesAdded < randomPositions.len and dt < 0.017) {
             //self.addCircle(randomPositions[bodiesAdded], self.randomRadius(), false);
             const bodiesToAdd = 100;
             for (0..bodiesToAdd) |i| {
-                if (std.crypto.random.boolean()) {
-                    if (bodiesAdded + i >= numberOfBodiesToAdd) {
-                        self.addRectangle(self.randomPos(), self.randomSize(), false);
-                    } else {
-                        self.addRectangle(randomPositions[bodiesAdded + i], self.randomSize(), false);
-                    }
+                // if (std.crypto.random.boolean()) {
+                if (bodiesAdded + i >= numberOfBodiesToAdd) {
+                    self.addRectangle(self.randomPos(), self.randomSize(), false);
                 } else {
-                    if (bodiesAdded + i >= numberOfBodiesToAdd) {
-                        self.addCircle(self.randomPos(), self.randomRadius(), false);
-                    } else {
-                        self.addCircle(randomPositions[bodiesAdded + i], self.randomRadius(), false);
-                    }
+                    self.addRectangle(randomPositions[bodiesAdded + i], self.randomSize(), false);
                 }
+                // } else {
+                //     if (bodiesAdded + i >= numberOfBodiesToAdd) {
+                //         self.addCircle(self.randomPos(), self.randomRadius(), false);
+                //     } else {
+                //         self.addCircle(randomPositions[bodiesAdded + i], self.randomRadius(), false);
+                //     }
+                // }
             }
             bodiesAdded += bodiesToAdd;
             addt += 0.05;

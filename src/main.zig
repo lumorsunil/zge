@@ -1,7 +1,8 @@
 const std = @import("std");
 const rl = @import("raylib");
 const ecs = @import("ecs");
-// const ztracy = @import("ztracy");
+const ztracy = @import("ztracy");
+const isTracingEnabled = @import("config.zig").isTracingEnabled;
 
 const DebugScene = @import("debug.zig").DebugScene;
 const RigidBody = @import("physics/rigid-body-flat.zig").RigidBodyFlat;
@@ -10,13 +11,19 @@ const V = @import("vector.zig").V;
 
 const cfg = @import("config.zig");
 
-pub fn main() !void {
-    // const zone = ztracy.ZoneN(@src(), "main");
-    // defer zone.End();
+pub fn main(init: std.process.Init) !void {
+    const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneN(@src(), "main") else null;
+    defer if (zone) |z| z.End();
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = true }){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    // const allocatorBuffer = try std.heap.page_allocator.alloc(u8, 1024 * 1024 * 512);
+    // var fixedBufferAllocator = std.heap.FixedBufferAllocator.init(allocatorBuffer);
+    // const allocator = fixedBufferAllocator.allocator();
+
+    // var stackFallback = std.heap.stackFallback(1024 * 1024 * 8, std.heap.page_allocator);
+    // const allocator = stackFallback.get();
+
+    const allocator = init.gpa;
+    const io = init.io;
 
     var reg = ecs.Registry.init(allocator);
     defer reg.deinit();
@@ -27,11 +34,11 @@ pub fn main() !void {
 
     scene.addPlayer(scene.randomPos(), V.init(10, 10));
 
-    scene.addRectangle(
-        V.init(0, 100),
-        V.init(V.x(cfg.size) * 0.7, 40),
-        true,
-    );
+    // scene.addRectangle(
+    //     V.init(0, 100),
+    //     V.init(V.x(cfg.size) * 0.7, 40),
+    //     true,
+    // );
 
     const sizeInt = V.toInt(i32, cfg.size);
     rl.initWindow(sizeInt[0], sizeInt[1], "Zig Game Engine Test");
@@ -40,7 +47,7 @@ pub fn main() !void {
     var lastSample: f64 = 0;
 
     var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    var stdout_writer: std.Io.File.Writer = .init(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
     try stdout.print("starting game\n", .{});
@@ -53,6 +60,7 @@ pub fn main() !void {
         if (lastSample + 5 < t) {
             lastSample = t;
             try stdout.print("bodies: {}, dt: {}, timeSteps: {d:.1}\n", .{ scene.reg.len(RigidBody), dt, scene.physicsSystem.numberOfTimeSteps(dt, 0.0005) });
+            // try stdout.print("fixedBufferAllocator.end_index: {}", .{fixedBufferAllocator.end_index});
         }
 
         scene.update(dt, t);

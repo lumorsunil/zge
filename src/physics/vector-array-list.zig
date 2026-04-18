@@ -89,7 +89,10 @@ pub const VectorArrayList = struct {
     }
 
     pub fn getPA(self: *VectorArrayList, accessor: Accessor) *f32 {
-        return &self.list.items[accessor.vectorIndex][accessor.elementIndex];
+        const vector_type = @typeInfo(Vector).vector;
+        const array: *[vector_type.len]vector_type.child = @ptrCast(&self.list.items[accessor.vectorIndex]);
+        return &array[accessor.elementIndex];
+        // return &self.list.items[accessor.vectorIndex][accessor.elementIndex];
     }
 
     /// Slow operation, only intended for initializing the vector and should not be called frequently
@@ -98,7 +101,10 @@ pub const VectorArrayList = struct {
     }
 
     pub fn setA(self: *VectorArrayList, accessor: Accessor, value: f32) void {
-        self.list.items[accessor.vectorIndex][accessor.elementIndex] = value;
+        const vector_type = @typeInfo(Vector).vector;
+        const array: *[vector_type.len]vector_type.child = @ptrCast(&self.list.items[accessor.vectorIndex]);
+        array[accessor.elementIndex] = value;
+        // self.list.items[accessor.vectorIndex][accessor.elementIndex] = value;
     }
 
     pub fn iterate(

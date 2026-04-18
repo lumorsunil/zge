@@ -18,4 +18,11 @@ pub const Collision = struct {
     contact1: Vector,
     contact2: Vector,
     contactCount: u2,
+
+    pub fn collisionSpeed(self: Collision) f32 {
+        const dotA = V.dot(self.velocityA, self.normal);
+        const dotB = V.dot(self.velocityB, self.normal);
+
+        return @abs(dotA - dotB);
+    }
 };

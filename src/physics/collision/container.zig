@@ -6,6 +6,7 @@ const Entry = @import("r-tree.zig").Entry;
 const ecs = @import("ecs");
 const RigidBody = @import("../rigid-body-flat.zig").RigidBodyFlat;
 const AABB = @import("../shape.zig").AABB;
+const Vector = @import("../../vector.zig").Vector;
 const Circle = @import("../shape.zig").Circle;
 const Collision = @import("result.zig").Collision;
 const Intersection = @import("intersection.zig").Intersection;
@@ -60,6 +61,8 @@ const TreeTypes = switch (ccAlgorithm) {
 
         const QuadTreeGetAabb = struct {
             pub fn getAabb(ctx: *anyopaque, entryKey: ecs.Entity) AABB {
+                const zone = ztracy.ZoneNC(@src(), "getAabb", 0x00_ff_ff_00);
+                defer zone.End();
                 const reg: *ecs.Registry = @ptrCast(@alignCast(ctx));
                 const body = reg.get(RigidBody, entryKey);
                 return body.aabb;
@@ -203,17 +206,61 @@ pub const CollisionContainer = struct {
         return result.toOwnedSlice(allocator) catch unreachable;
     }
 
-    pub fn checkCollisionsQT(self: *CollisionContainer, boundary: AABB) []Collision {
+    /// Result is owned by caller
+    pub fn intersectingLine(
+        self: *CollisionContainer,
+        start: Vector,
+        end: Vector,
+    ) []Intersection(ecs.Entity) {
+        const allocator = self.allocator;
+        var result = ArrayList(Intersection(ecs.Entity)).empty;
+
+        const intersections = self.tree.intersectingLine(allocator, start, end);
+
+        for (intersections) |intersection| {
+            result.append(allocator, intersection) catch unreachable;
+        }
+
+        return result.toOwnedSlice(allocator) catch unreachable;
+    }
+
+    pub const CheckCollisionQTOptions = union(enum) {
+        buildAndCheck: struct {
+            boundary: AABB,
+        },
+        check,
+
+        pub fn build(boundary: AABB) CheckCollisionQTOptions {
+            return .{ .buildAndCheck = .{ .boundary = boundary } };
+        }
+    };
+
+    pub fn checkCollisionsQT(
+        self: *CollisionContainer,
+        options: CheckCollisionQTOptions,
+    ) []Collision {
         const allocator = self.allocator;
         self.collisions.resize(allocator, 0) catch unreachable;
-        self.tree.populateAndIntersect(
-            self.allocator,
-            self.reg,
-            boundary,
-            self.view.data(),
-            self,
-            intersectionHandler,
-        );
+
+        switch (options) {
+            .buildAndCheck => |bac| {
+                self.tree.populateAndIntersectPageByPage(
+                    self.allocator,
+                    self.reg,
+                    bac.boundary,
+                    self.view.data(),
+                    self,
+                    intersectionHandler,
+                );
+            },
+            .check => {
+                self.tree.updatePositionsAndIntersect(
+                    self.allocator,
+                    self,
+                    intersectionHandler,
+                );
+            },
+        }
         return self.collisions.items;
     }
 
@@ -222,6 +269,9 @@ pub const CollisionContainer = struct {
         entity: ecs.Entity,
         intersections: []Intersection(ecs.Entity),
     ) void {
+        const zone = ztracy.ZoneNC(@src(), "intersectionHandler", 0x00_ff_ff_00);
+        defer zone.End();
+
         const allocator = self.allocator;
         const body = self.reg.get(RigidBody, entity);
 

@@ -178,8 +178,8 @@ pub const RigidBodyContainer = struct {
     }
 
     pub fn removeRigidBody(self: *RigidBodyContainer, i: usize) void {
-        _ = i; // autofix
-        _ = self; // autofix
+        _ = i;
+        _ = self;
         //self.zeroRigidBody(i);
     }
 

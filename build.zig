@@ -2,25 +2,12 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) void {
     // const options = .{
-    //     .enable_ztracy = b.option(bool, "enable_ztracy", "Enable Tracy profile markers") orelse false,
+    //     // .enable_ztracy = b.option(bool, "enable_ztracy", "Enable Tracy profile markers") orelse false,
     // };
 
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const isWasm = target.result.cpu.arch.isWasm();
-
-    var zge = b.addModule("zge", .{
-        .root_source_file = b.path("src/zge.zig"),
-    });
-
-    const exe = b.addExecutable(.{
-        .name = "zge",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
 
     const raylib_dep = if (!isWasm) b.dependency("raylib_zig", .{
         .target = target,
@@ -31,26 +18,72 @@ pub fn build(b: *std.Build) void {
         .rmodels = false,
     });
 
-    const raylib = raylib_dep.module("raylib");
-    // const raygui = raylib_dep.module("raygui");
-    const raylib_artifact = raylib_dep.artifact("raylib");
-    exe.linkLibrary(raylib_artifact);
-    exe.root_module.addImport("raylib", raylib);
-    // exe.root_module.addImport("raygui", raygui);
-    zge.addImport("raylib", raylib);
+    // const ztracy_dep = b.dependency("ztracy", .{
+    //     .enable_ztracy = options.enable_ztracy,
+    // });
+    // const ztracy = ztracy_dep.module("root");
+    const ztracy = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .root_source_file = b.path("ztracy/ztracy.zig"),
+    });
 
     const ecs_dep = b.dependency("entt", .{
         .target = target,
         .optimize = optimize,
     });
     const ecs = ecs_dep.module("zig-ecs");
-    exe.root_module.addImport("ecs", ecs);
-    zge.addImport("ecs", ecs);
 
-    // const ztracy_dep = b.dependency("ztracy", .{
-    //     .enable_ztracy = options.enable_ztracy,
-    // });
-    // const ztracy = ztracy_dep.module("root");
+    _ = b.addModule("zge", .{
+        .root_source_file = b.path("src/zge.zig"),
+        .imports = &.{
+            .{
+                .name = "raylib",
+                .module = raylib_dep.module("raylib"),
+            },
+            .{
+                .name = "ecs",
+                .module = ecs,
+            },
+            .{
+                .name = "ztracy",
+                .module = ztracy,
+            },
+        },
+    });
+
+    const exe = b.addExecutable(.{
+        .name = "zge",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{
+                    .name = "raylib",
+                    .module = raylib_dep.module("raylib"),
+                },
+                .{
+                    .name = "ecs",
+                    .module = ecs,
+                },
+                .{
+                    .name = "ztracy",
+                    .module = ztracy,
+                },
+            },
+        }),
+    });
+
+    // const raygui = raylib_dep.module("raygui");
+    // const raylib_artifact = raylib_dep.artifact("raylib");
+    // exe.linkLibrary(raylib_artifact);
+    // exe.root_module.addImport("raylib", raylib);
+    // exe.root_module.addImport("raygui", raygui);
+    // zge.addImport("raylib", raylib);
+
+    // exe.root_module.addImport("ecs", ecs);
+    // zge.addImport("ecs", ecs);
     // exe.root_module.addImport("ztracy", ztracy);
     // exe.linkLibrary(ztracy_dep.artifact("tracy"));
     // zge.addImport("ztracy", ztracy);

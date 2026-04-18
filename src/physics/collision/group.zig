@@ -3,46 +3,40 @@ const Allocator = std.mem.Allocator;
 const ecs = @import("ecs");
 
 pub const EntityGroup = struct {
-    entities: std.AutoArrayHashMap(ecs.Entity, bool),
+    entities: std.array_hash_map.Auto(ecs.Entity, bool),
 
-    pub fn init(allocator: Allocator) EntityGroup {
-        return EntityGroup{
-            .entities = .init(allocator),
-        };
-    }
+    pub const empty: @This() = .{ .entities = .empty };
 
-    pub fn deinit(self: *EntityGroup) void {
-        self.entities.deinit();
+    pub fn deinit(self: *EntityGroup, allocator: Allocator) void {
+        self.entities.deinit(allocator);
     }
 };
 
 pub const CollisionEnabledFor = struct {
-    groups: std.StringHashMap(EntityGroup),
-    collisionsEnabledFor: std.AutoArrayHashMap(ecs.Entity, std.ArrayList(*EntityGroup)),
-    collisionsEnabledForGroups: std.StringArrayHashMap(std.ArrayList(*[]const u8)),
+    groups: std.hash_map.StringHashMapUnmanaged(EntityGroup),
+    collisionsEnabledFor: std.array_hash_map.Auto(ecs.Entity, std.ArrayList(*EntityGroup)),
+    collisionsEnabledForGroups: std.array_hash_map.String(std.ArrayList(*[]const u8)),
 
-    pub fn init(allocator: Allocator) CollisionEnabledFor {
-        return CollisionEnabledFor{
-            .groups = std.StringHashMap(EntityGroup).init(allocator),
-            .collisionsEnabledFor = std.AutoArrayHashMap(ecs.Entity, std.ArrayList(*EntityGroup)).init(allocator),
-            .collisionsEnabledForGroups = std.StringArrayHashMap(std.ArrayList(*[]const u8)).init(allocator),
-        };
-    }
+    pub const empty = @This(){
+        .groups = .empty,
+        .collisionsEnabledFor = .empty,
+        .collisionsEnabledForGroups = .empty,
+    };
 
     pub fn deinit(self: *CollisionEnabledFor, allocator: Allocator) void {
         var it = self.groups.valueIterator();
         while (it.next()) |group| {
-            group.deinit();
+            group.deinit(allocator);
         }
-        self.groups.deinit();
+        self.groups.deinit(allocator);
         for (self.collisionsEnabledFor.values()) |*item| {
             item.deinit(allocator);
         }
-        self.collisionsEnabledFor.deinit();
+        self.collisionsEnabledFor.deinit(allocator);
         for (self.collisionsEnabledForGroups.values()) |*item| {
             item.deinit(allocator);
         }
-        self.collisionsEnabledForGroups.deinit();
+        self.collisionsEnabledForGroups.deinit(allocator);
     }
 
     pub fn enableCollisionsFor(
@@ -56,7 +50,7 @@ pub const CollisionEnabledFor = struct {
             return;
         };
 
-        const cef = self.collisionsEnabledFor.getOrPut(entity) catch unreachable;
+        const cef = self.collisionsEnabledFor.getOrPut(allocator, entity) catch unreachable;
 
         if (!cef.found_existing) {
             cef.value_ptr.* = .empty;
@@ -86,7 +80,7 @@ pub const CollisionEnabledFor = struct {
             self.enableCollisionsFor(allocator, entity, groupBKey);
         }
 
-        const cef = self.collisionsEnabledForGroups.getOrPut(groupAKey) catch unreachable;
+        const cef = self.collisionsEnabledForGroups.getOrPut(allocator, groupAKey) catch unreachable;
 
         if (!cef.found_existing) {
             cef.value_ptr.* = .empty;
@@ -111,12 +105,12 @@ pub const CollisionEnabledFor = struct {
     }
 
     pub fn createGroup(self: *CollisionEnabledFor, allocator: Allocator, groupKey: []const u8) void {
-        const g = self.groups.getOrPut(groupKey) catch unreachable;
+        const g = self.groups.getOrPut(allocator, groupKey) catch unreachable;
 
         if (g.found_existing) {
             std.log.warn("Group already created: {s}", .{groupKey});
         } else {
-            g.value_ptr.* = EntityGroup.init(allocator);
+            g.value_ptr.* = .empty;
         }
     }
 
@@ -130,7 +124,7 @@ pub const CollisionEnabledFor = struct {
             std.log.err("Group not found: {s}", .{groupKey});
             return;
         };
-        const addedToGroup = group.entities.getOrPut(entity) catch unreachable;
+        const addedToGroup = group.entities.getOrPut(allocator, entity) catch unreachable;
         if (addedToGroup.found_existing) {
             std.log.warn("Entity {} already added to group: {s}", .{ entity, groupKey });
         }
