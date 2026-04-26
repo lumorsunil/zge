@@ -3,3 +3,4 @@ pub const draw = @import("draw.zig");
 pub const screen = @import("screen.zig");
 pub const vector = @import("vector.zig");
 pub const components = @import("components.zig");
+pub const ztracy = @import("ztracy");

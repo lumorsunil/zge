@@ -2,3 +2,4 @@ zig-out
 .zig-cache
 session.vim
 zig-pkg
+.codex

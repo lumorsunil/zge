@@ -6,8 +6,6 @@ const ecs = @import("ecs");
 const cfg = @import("config.zig");
 
 const Screen = @import("screen.zig").Screen;
-const PhysicsSystem = @import("physics.zig").PhysicsSystem;
-const DrawSystem = @import("draw.zig").DrawSystem;
 
 const V = @import("vector.zig").V;
 const Vector = @import("vector.zig").Vector;
@@ -20,8 +18,11 @@ const AABB = @import("physics/shape.zig").AABB;
 const Rectangle = @import("physics/shape.zig").Rectangle;
 const Circle = @import("physics/shape.zig").Circle;
 const Densities = @import("physics/rigid-body-static.zig").Densities;
+const ZGEConfig = @import("config.zig").ZGEConfig;
 
 const screen = Screen.init(cfg.size);
+
+const zge_config = ZGEConfig{};
 
 pub const DebugScene = struct {
     allocator: Allocator,
@@ -36,8 +37,8 @@ pub const DebugScene = struct {
     },
 
     screen: *const Screen,
-    physicsSystem: PhysicsSystem = undefined,
-    drawSystem: DrawSystem = undefined,
+    physicsSystem: zge_config.PhysicsSystem() = undefined,
+    drawSystem: zge_config.DrawSystem() = undefined,
 
     const boundary: AABB = .{
         .tl = -cfg.sizeHalf,
@@ -45,16 +46,16 @@ pub const DebugScene = struct {
         .isMinimal = true,
     };
 
-    pub fn init(allocator: Allocator, reg: *ecs.Registry) DebugScene {
-        return DebugScene{
+    pub fn init(allocator: Allocator, reg: *ecs.Registry) @This() {
+        return .{
             .allocator = allocator,
             .reg = reg,
-            .rand = std.Random.DefaultPrng.init(0),
+            .rand = .init(0),
             .player = undefined,
 
             .screen = &screen,
-            .physicsSystem = PhysicsSystem.init(allocator, reg, boundary),
-            .drawSystem = DrawSystem.init(allocator, reg, &screen),
+            .physicsSystem = .init(allocator, reg, boundary),
+            .drawSystem = .init(allocator, reg, &screen),
         };
     }
 
@@ -88,7 +89,7 @@ pub const DebugScene = struct {
 
     const maxRadius = 10 + 2;
     pub fn randomRadius(self: *DebugScene) f32 {
-        _ = self; // autofix
+        _ = self;
         // return 10 + 5 * self.rand.random().float(f32);
         return 1;
     }
@@ -215,7 +216,7 @@ pub const DebugScene = struct {
     };
 
     pub fn update(self: *DebugScene, dt: f32, t: f64) void {
-        _ = t; // autofix
+        _ = t;
         var force = V.zero;
         const speed = 1000;
 
@@ -247,7 +248,7 @@ pub const DebugScene = struct {
             body.applyForce(force);
         }
 
-        self.addBodiesUntilLag(dt);
+        // self.addBodiesUntilLag(dt);
 
         self.physicsSystem.update(dt);
         //self.physicsSystem.updateDynamicSubSteps(dt, 0.0005);

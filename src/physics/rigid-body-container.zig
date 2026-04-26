@@ -10,26 +10,28 @@ const PV = @import("../vector.zig").PV;
 const PVector = @import("../vector.zig").PVector;
 
 const VectorArrayList = @import("vector-array-list.zig").VectorArrayList;
-const VectorArray = @import("vector-array-list.zig").Vector;
 
 const RigidBodyStaticParams = @import("rigid-body-static.zig").RigidBodyStaticParams;
 const RigidBodyDynamicParams = @import("rigid-body-dynamic.zig").RigidBodyDynamicParams;
+
+const VAL = VectorArrayList(f32, 0, .default);
+const VA = VAL.Vector;
 
 const INITIAL_CAPACITY = 100;
 
 pub const RigidBodyContainer = struct {
     rigidBodiesCapacity: usize,
 
-    rigidBodiesDynamic: VectorArrayList = undefined,
-    rigidBodiesPositionX: VectorArrayList = undefined,
-    rigidBodiesPositionY: VectorArrayList = undefined,
-    rigidBodiesVelocityX: VectorArrayList = undefined,
-    rigidBodiesVelocityY: VectorArrayList = undefined,
-    rigidBodiesAccelerationX: VectorArrayList = undefined,
-    rigidBodiesAccelerationY: VectorArrayList = undefined,
-    rigidBodiesRotation: VectorArrayList = undefined,
-    rigidBodiesRotationalVelocity: VectorArrayList = undefined,
-    rigidBodiesRotationalAcceleration: VectorArrayList = undefined,
+    rigidBodiesDynamic: VAL = undefined,
+    rigidBodiesPositionX: VAL = undefined,
+    rigidBodiesPositionY: VAL = undefined,
+    rigidBodiesVelocityX: VAL = undefined,
+    rigidBodiesVelocityY: VAL = undefined,
+    rigidBodiesAccelerationX: VAL = undefined,
+    rigidBodiesAccelerationY: VAL = undefined,
+    rigidBodiesRotation: VAL = undefined,
+    rigidBodiesRotationalVelocity: VAL = undefined,
+    rigidBodiesRotationalAcceleration: VAL = undefined,
 
     allocator: Allocator,
 
@@ -49,30 +51,31 @@ pub const RigidBodyContainer = struct {
     }
 
     fn deinitRigidBodies(self: *RigidBodyContainer) void {
-        self.rigidBodiesDynamic.deinit();
-        self.rigidBodiesPositionX.deinit();
-        self.rigidBodiesPositionY.deinit();
-        self.rigidBodiesVelocityX.deinit();
-        self.rigidBodiesVelocityY.deinit();
-        self.rigidBodiesAccelerationX.deinit();
-        self.rigidBodiesAccelerationY.deinit();
-        self.rigidBodiesRotation.deinit();
-        self.rigidBodiesRotationalVelocity.deinit();
-        self.rigidBodiesRotationalAcceleration.deinit();
+        const allocator = self.allocator;
+        self.rigidBodiesDynamic.deinit(allocator);
+        self.rigidBodiesPositionX.deinit(allocator);
+        self.rigidBodiesPositionY.deinit(allocator);
+        self.rigidBodiesVelocityX.deinit(allocator);
+        self.rigidBodiesVelocityY.deinit(allocator);
+        self.rigidBodiesAccelerationX.deinit(allocator);
+        self.rigidBodiesAccelerationY.deinit(allocator);
+        self.rigidBodiesRotation.deinit(allocator);
+        self.rigidBodiesRotationalVelocity.deinit(allocator);
+        self.rigidBodiesRotationalAcceleration.deinit(allocator);
     }
 
     fn initRigidBodies(self: *RigidBodyContainer) void {
         const allocator = self.allocator;
-        self.rigidBodiesDynamic = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
-        self.rigidBodiesPositionX = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
-        self.rigidBodiesPositionY = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
-        self.rigidBodiesVelocityX = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
-        self.rigidBodiesVelocityY = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
-        self.rigidBodiesAccelerationX = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
-        self.rigidBodiesAccelerationY = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
-        self.rigidBodiesRotation = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
-        self.rigidBodiesRotationalVelocity = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
-        self.rigidBodiesRotationalAcceleration = VectorArrayList.initCapacity(allocator, self.rigidBodiesCapacity);
+        self.rigidBodiesDynamic = .initCapacity(allocator, self.rigidBodiesCapacity);
+        self.rigidBodiesPositionX = .initCapacity(allocator, self.rigidBodiesCapacity);
+        self.rigidBodiesPositionY = .initCapacity(allocator, self.rigidBodiesCapacity);
+        self.rigidBodiesVelocityX = .initCapacity(allocator, self.rigidBodiesCapacity);
+        self.rigidBodiesVelocityY = .initCapacity(allocator, self.rigidBodiesCapacity);
+        self.rigidBodiesAccelerationX = .initCapacity(allocator, self.rigidBodiesCapacity);
+        self.rigidBodiesAccelerationY = .initCapacity(allocator, self.rigidBodiesCapacity);
+        self.rigidBodiesRotation = .initCapacity(allocator, self.rigidBodiesCapacity);
+        self.rigidBodiesRotationalVelocity = .initCapacity(allocator, self.rigidBodiesCapacity);
+        self.rigidBodiesRotationalAcceleration = .initCapacity(allocator, self.rigidBodiesCapacity);
     }
 
     fn ensureAndExpandRigidBodyCapacity(self: *RigidBodyContainer) void {
@@ -165,16 +168,17 @@ pub const RigidBodyContainer = struct {
         isStatic: bool,
         isPointersInvalidated: ?*bool,
     ) void {
-        self.rigidBodiesDynamic.set(i, if (isStatic) 0 else 1, isPointersInvalidated);
-        self.rigidBodiesPositionX.set(i, V.x(pos), isPointersInvalidated);
-        self.rigidBodiesPositionY.set(i, V.y(pos), isPointersInvalidated);
-        self.rigidBodiesVelocityX.set(i, V.x(vel), isPointersInvalidated);
-        self.rigidBodiesVelocityY.set(i, V.y(vel), isPointersInvalidated);
-        self.rigidBodiesAccelerationX.set(i, V.x(acc), isPointersInvalidated);
-        self.rigidBodiesAccelerationY.set(i, V.y(acc), isPointersInvalidated);
-        self.rigidBodiesRotation.set(i, r, isPointersInvalidated);
-        self.rigidBodiesRotationalVelocity.set(i, rv, isPointersInvalidated);
-        self.rigidBodiesRotationalAcceleration.set(i, ra, isPointersInvalidated);
+        const allocator = self.allocator;
+        self.rigidBodiesDynamic.set(allocator, i, if (isStatic) 0 else 1, isPointersInvalidated);
+        self.rigidBodiesPositionX.set(allocator, i, V.x(pos), isPointersInvalidated);
+        self.rigidBodiesPositionY.set(allocator, i, V.y(pos), isPointersInvalidated);
+        self.rigidBodiesVelocityX.set(allocator, i, V.x(vel), isPointersInvalidated);
+        self.rigidBodiesVelocityY.set(allocator, i, V.y(vel), isPointersInvalidated);
+        self.rigidBodiesAccelerationX.set(allocator, i, V.x(acc), isPointersInvalidated);
+        self.rigidBodiesAccelerationY.set(allocator, i, V.y(acc), isPointersInvalidated);
+        self.rigidBodiesRotation.set(allocator, i, r, isPointersInvalidated);
+        self.rigidBodiesRotationalVelocity.set(allocator, i, rv, isPointersInvalidated);
+        self.rigidBodiesRotationalAcceleration.set(allocator, i, ra, isPointersInvalidated);
     }
 
     pub fn removeRigidBody(self: *RigidBodyContainer, i: usize) void {
@@ -185,32 +189,38 @@ pub const RigidBodyContainer = struct {
 
     /// Slow operation
     pub fn getPositionP(self: *RigidBodyContainer, i: usize) PVector {
-        return PV.init(self.rigidBodiesPositionX.getP(i), self.rigidBodiesPositionY.getP(i));
+        const allocator = self.allocator;
+        return PV.init(self.rigidBodiesPositionX.getP(allocator, i), self.rigidBodiesPositionY.getP(allocator, i));
     }
 
     /// Slow operation
     pub fn getVelocityP(self: *RigidBodyContainer, i: usize) PVector {
-        return PV.init(self.rigidBodiesVelocityX.getP(i), self.rigidBodiesVelocityY.getP(i));
+        const allocator = self.allocator;
+        return PV.init(self.rigidBodiesVelocityX.getP(allocator, i), self.rigidBodiesVelocityY.getP(allocator, i));
     }
 
     /// Slow operation
     pub fn getAccelerationP(self: *RigidBodyContainer, i: usize) PVector {
-        return PV.init(self.rigidBodiesAccelerationX.getP(i), self.rigidBodiesAccelerationY.getP(i));
+        const allocator = self.allocator;
+        return PV.init(self.rigidBodiesAccelerationX.getP(allocator, i), self.rigidBodiesAccelerationY.getP(allocator, i));
     }
 
     /// Slow operation
     pub fn getRotationP(self: *RigidBodyContainer, i: usize) *f32 {
-        return self.rigidBodiesRotation.getP(i);
+        const allocator = self.allocator;
+        return self.rigidBodiesRotation.getP(allocator, i);
     }
 
     /// Slow operation
     pub fn getRotationalVelocityP(self: *RigidBodyContainer, i: usize) *f32 {
-        return self.rigidBodiesRotationalVelocity.getP(i);
+        const allocator = self.allocator;
+        return self.rigidBodiesRotationalVelocity.getP(allocator, i);
     }
 
     /// Slow operation
     pub fn getRotationalAccelerationP(self: *RigidBodyContainer, i: usize) *f32 {
-        return self.rigidBodiesRotationalAcceleration.getP(i);
+        const allocator = self.allocator;
+        return self.rigidBodiesRotationalAcceleration.getP(allocator, i);
     }
 
     /// Slow operation
@@ -265,31 +275,31 @@ pub const RigidBodyContainer = struct {
         body.ra = self.getRotationalAccelerationP(i);
     }
 
-    fn integrateScaledFn(dt: f32, a: *VectorArray, b: *VectorArray) void {
-        const splat = @as(VectorArray, @splat(dt));
+    fn integrateScaledFn(dt: f32, a: *VA, b: *VA) void {
+        const splat = @as(VA, @splat(dt));
 
         a.* += b.* * splat;
     }
 
-    fn integrateScaled(dt: f32, a: *VectorArrayList, b: *VectorArrayList) void {
+    fn integrateScaled(dt: f32, a: *VAL, b: *VAL) void {
         a.iterateC(f32, b, dt, integrateScaledFn);
     }
 
-    fn applyGravityFn(gravity: *const VectorArray, acceleration: *VectorArray, dynamic: *VectorArray) void {
+    fn applyGravityFn(gravity: *const VA, acceleration: *VA, dynamic: *VA) void {
         acceleration.* += gravity.* * dynamic.*;
     }
 
     fn applyGravity(self: *RigidBodyContainer, gravity: Vector) void {
-        var gravityXVector = @as(VectorArray, @splat(gravity[0]));
+        var gravityXVector = @as(VA, @splat(gravity[0]));
         self.rigidBodiesAccelerationX.iterateC(
-            *VectorArray,
+            *VA,
             &self.rigidBodiesDynamic,
             &gravityXVector,
             applyGravityFn,
         );
-        var gravityYVector = @as(VectorArray, @splat(gravity[1]));
+        var gravityYVector = @as(VA, @splat(gravity[1]));
         self.rigidBodiesAccelerationY.iterateC(
-            *VectorArray,
+            *VA,
             &self.rigidBodiesDynamic,
             &gravityYVector,
             applyGravityFn,

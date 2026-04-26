@@ -23,6 +23,7 @@ const AABB = @import("physics/shape.zig").AABB;
 const Circle = @import("physics/shape.zig").Circle;
 pub const Densities = @import("physics/rigid-body-static.zig").Densities;
 const CollisionEnabledFor = @import("physics/collision/group.zig").CollisionEnabledFor;
+const ZGEConfig = @import("config.zig").ZGEConfig;
 
 pub const shape = @import("physics/shape.zig");
 
@@ -42,408 +43,411 @@ const CollisionType = enum {
     bruteForce,
 };
 
-const collisionType: CollisionType = .quadTree;
+pub fn PhysicsSystem(config: ZGEConfig) type {
+    const CC = CollisionContainer(config);
 
-pub const PhysicsSystem = struct {
-    collisionEvents: [MAX_COLLISION_EVENTS]Collision = undefined,
-    gravity: Vector,
-    groundFriction: f32,
+    return struct {
+        collisionEvents: [MAX_COLLISION_EVENTS]Collision = undefined,
+        gravity: Vector,
+        groundFriction: f32,
 
-    view: ecs.BasicView(RigidBody),
+        view: ecs.BasicView(RigidBody),
 
-    reg: *ecs.Registry,
-    bodyContainer: RigidBodyContainer,
-    collisionContainer: *CollisionContainer,
+        reg: *ecs.Registry,
+        bodyContainer: RigidBodyContainer,
+        collisionContainer: *CC,
 
-    sweepLineBuffer: ArrayList(SweepLine),
-    overlappingBuffer: ArrayList(bool),
+        sweepLineBuffer: ArrayList(SweepLine),
+        overlappingBuffer: ArrayList(bool),
 
-    boundary: AABB,
+        boundary: AABB,
 
-    collisionGroups: CollisionEnabledFor,
+        collisionGroups: CollisionEnabledFor,
 
-    var numberOfCollisionEvents: usize = 0;
-    var numberOfResolvedCollisions: usize = 0;
+        var numberOfCollisionEvents: usize = 0;
+        var numberOfResolvedCollisions: usize = 0;
 
-    pub fn init(allocator: Allocator, reg: *ecs.Registry, boundary: AABB) PhysicsSystem {
-        reg.singletons().add(CollisionContainer.init(allocator, reg));
-        const ccPtr = reg.singletons().get(CollisionContainer);
+        pub fn init(allocator: Allocator, reg: *ecs.Registry, boundary: AABB) @This() {
+            reg.singletons().add(CC.init(allocator, reg));
+            const ccPtr = reg.singletons().get(CC);
 
-        return PhysicsSystem{
-            .gravity = V.init(0, 0),
-            .groundFriction = 0.9,
-            .view = reg.basicView(RigidBody),
-            .reg = reg,
-            .bodyContainer = .init(allocator),
-            .collisionContainer = ccPtr,
+            return @This(){
+                .gravity = V.init(0, 0),
+                .groundFriction = 0.9,
+                .view = reg.basicView(RigidBody),
+                .reg = reg,
+                .bodyContainer = .init(allocator),
+                .collisionContainer = ccPtr,
 
-            .sweepLineBuffer = ArrayList(SweepLine).initCapacity(allocator, 100) catch unreachable,
-            .overlappingBuffer = ArrayList(bool).initCapacity(allocator, 100) catch unreachable,
+                .sweepLineBuffer = ArrayList(SweepLine).initCapacity(allocator, 100) catch unreachable,
+                .overlappingBuffer = ArrayList(bool).initCapacity(allocator, 100) catch unreachable,
 
-            .boundary = boundary,
+                .boundary = boundary,
 
-            .collisionGroups = .empty,
-        };
-    }
-
-    pub fn deinit(self: *PhysicsSystem, allocator: Allocator) void {
-        self.bodyContainer.deinit();
-        self.collisionContainer.deinit();
-        self.sweepLineBuffer.deinit(allocator);
-        self.overlappingBuffer.deinit(allocator);
-        self.collisionGroups.deinit(allocator);
-    }
-
-    pub fn numberOfTimeSteps(self: PhysicsSystem, dt: f32, maxTimeStep: f32) f32 {
-        _ = self;
-        return dt / maxTimeStep;
-    }
-
-    pub fn update(self: *PhysicsSystem, dt: f32) void {
-        const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneNC(@src(), "physics upate", 0xff_00_00_00) else null;
-        defer if (zone) |z| z.End();
-
-        const intervalTimeStep = dt / PHYSICS_SUB_STEPS;
-
-        numberOfCollisionEvents = 0;
-        numberOfResolvedCollisions = 0;
-
-        self.updatePrevAccelerations();
-
-        self.bodyContainer.startPhysicsFrame(self.gravity);
-
-        for (0..PHYSICS_SUB_STEPS) |subStep| {
-            self.updatePositions(intervalTimeStep);
-            self.updateCollisions(subStep);
-            self.resolveCollisions();
+                .collisionGroups = .empty,
+            };
         }
 
-        self.bodyContainer.endPhysicsFrame();
-    }
+        pub fn deinit(self: *@This(), allocator: Allocator) void {
+            self.bodyContainer.deinit();
+            self.collisionContainer.deinit();
+            self.sweepLineBuffer.deinit(allocator);
+            self.overlappingBuffer.deinit(allocator);
+            self.collisionGroups.deinit(allocator);
+        }
 
-    pub fn updateDynamicSubSteps(self: *PhysicsSystem, dt: f32, maxTimeStep: f32) void {
-        const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneNC(@src(), "physics upate", 0xff_00_00_00) else null;
-        defer if (zone) |z| z.End();
+        pub fn numberOfTimeSteps(self: @This(), dt: f32, maxTimeStep: f32) f32 {
+            _ = self;
+            return dt / maxTimeStep;
+        }
 
-        const timeStep = @min(dt, maxTimeStep);
+        pub fn update(self: *@This(), dt: f32) void {
+            const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneNC(@src(), "physics upate", 0xff_00_00_00) else null;
+            defer if (zone) |z| z.End();
 
-        var timeLeft = dt;
+            const intervalTimeStep = dt / PHYSICS_SUB_STEPS;
 
-        while (timeLeft > 0) {
-            const actualTimeStep = @min(timeLeft, timeStep);
-            timeLeft -= timeStep;
-            self.updatePositions(actualTimeStep);
+            numberOfCollisionEvents = 0;
+            numberOfResolvedCollisions = 0;
 
-            if (collisionType != .none) {
-                self.updateCollisions();
+            self.updatePrevAccelerations();
+
+            self.bodyContainer.startPhysicsFrame(self.gravity);
+            self.collisionContainer.startFrame();
+
+            for (0..PHYSICS_SUB_STEPS) |subStep| {
+                self.updatePositions(intervalTimeStep);
+                self.updateCollisions(subStep);
                 self.resolveCollisions();
             }
-        }
-    }
 
-    fn updatePositions(self: *PhysicsSystem, dt: f32) void {
-        const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneNC(@src(), "update positions", 0xff_00_00_00) else null;
-        defer if (zone) |z| z.End();
-
-        self.bodyContainer.updatePositions(dt);
-
-        //self.removeFarBodies();
-
-        for (self.view.data()) |entity| {
-            const body = self.view.get(entity);
-            body.updateTransform();
-
-            if (collisionType == .rTree) {
-                self.collisionContainer.updateBody(entity);
-            }
+            self.bodyContainer.endPhysicsFrame();
+            self.collisionContainer.endFrame();
         }
 
-        if (collisionType == .rTree) {
-            self.collisionContainer.sync();
-        }
-    }
-
-    fn updatePrevAccelerations(self: *PhysicsSystem) void {
-        for (self.view.raw()) |*body| {
-            body.d.pa = body.d.cloneAccel();
-        }
-    }
-
-    fn removeFarBodies(self: *PhysicsSystem) void {
-        for (self.view.data()) |entity| {
-            const body = self.view.getConst(entity);
-            if (body.d.p.x.* < -cfg.sizeHalfW or
-                body.d.p.x.* > cfg.sizeHalfW or
-                body.d.p.y.* < -cfg.sizeHalfH or
-                body.d.p.y.* > cfg.sizeHalfH)
-            {
-                self.removeRigidBody(entity);
-            }
-        }
-    }
-
-    fn wrapPositions(body: *RigidBody) void {
-        if (body.d.p.x < -cfg.sizeHalfW) {
-            body.d.p.x = -body.d.p.x;
-        }
-
-        if (body.d.p.x > cfg.sizeHalfW) {
-            body.d.p.x = -body.d.p.x;
-        }
-
-        if (body.d.p.y < -cfg.sizeHalfH) {
-            body.d.p.y = body.d.p.y;
-        }
-
-        if (body.d.p.y > cfg.sizeHalfH) {
-            body.d.p.y = body.d.p.y;
-        }
-    }
-
-    fn updateCollisions(self: *PhysicsSystem, subStep: usize) void {
-        const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneNC(@src(), "update collisions", 0xff_00_00_00) else null;
-        defer if (zone) |z| z.End();
-
-        // const bodies = self.view.raw();
-
-        // zone.Text("Bodies:");
-        // zone.Value(bodies.len);
-
-        switch (collisionType) {
-            .none => {},
-            .bruteForce => self.updateCollisionsBruteForce(),
-            .rTree => self.updateCollisionsWithContainer(),
-            .sweep => self.updateCollisionSweep(),
-            .quadTree => self.updateCollisionsWithContainerQT(
-                if (subStep == 0)
-                    .build(self.boundary)
-                else
-                    .check,
-                // .build(self.boundary),
-            ),
-        }
-    }
-
-    fn updateCollisionsWithContainer(self: *PhysicsSystem) void {
-        for (self.view.data()) |entity| {
-            const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneN(@src(), "uc entity") else null;
+        pub fn updateDynamicSubSteps(self: *@This(), dt: f32, maxTimeStep: f32) void {
+            const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneNC(@src(), "physics upate", 0xff_00_00_00) else null;
             defer if (zone) |z| z.End();
-            const body = self.view.get(entity);
-            if (body.s.isStatic) continue;
-            self.collisionContainer.checkCollision(body, entity, self, emitCollisionEvent);
-        }
-    }
 
-    fn updateCollisionsWithContainerQT(
-        self: *PhysicsSystem,
-        options: CollisionContainer.CheckCollisionQTOptions,
-    ) void {
-        const collisions = self.collisionContainer.checkCollisionsQT(options);
+            const timeStep = @min(dt, maxTimeStep);
 
-        for (collisions) |collision| {
-            self.emitCollisionEvent(collision);
-        }
-    }
+            var timeLeft = dt;
 
-    fn updateCollisionSweep(self: *PhysicsSystem) void {
-        const bodies = self.view.raw();
-        const allocator = self.reg.singletons().getConst(Allocator);
-        self.sweepLineBuffer.ensureTotalCapacityPrecise(allocator, bodies.len * 2) catch unreachable;
-        self.sweepLineBuffer.expandToCapacity();
-        self.overlappingBuffer.ensureTotalCapacityPrecise(allocator, bodies.len * 2) catch unreachable;
-        self.overlappingBuffer.expandToCapacity();
+            while (timeLeft > 0) {
+                const actualTimeStep = @min(timeLeft, timeStep);
+                timeLeft -= timeStep;
+                self.updatePositions(actualTimeStep);
 
-        sweep(
-            RigidBody,
-            bodies,
-            self.sweepLineBuffer.items,
-            self.overlappingBuffer.items,
-            self,
-            getAabb,
-            onAxisOverlap,
-        );
-    }
-
-    fn getAabb(_: *PhysicsSystem, entry: RigidBody) AABB {
-        return entry.aabb;
-    }
-
-    fn onAxisOverlap(self: *PhysicsSystem, a: usize, bs: []bool, n: usize, _: []const RigidBody) void {
-        const bodyA = &self.view.raw()[a];
-        var left = n;
-
-        for (0.., bs) |i, b| {
-            if (!b or left <= 0) continue;
-            const bodyB = &self.view.raw()[i];
-
-            switch (bodyA.checkCollision(bodyB)) {
-                .noCollision => {},
-                .collision => |collision| self.emitCollisionEvent(collision),
-            }
-
-            left -= 1;
-        }
-    }
-
-    fn updateCollisionsBruteForce(self: *PhysicsSystem) void {
-        const bodies = self.view.raw();
-
-        if (bodies.len == 0) return;
-
-        for (0.., bodies[0 .. bodies.len - 1]) |iA, *bodyA| {
-            if (bodyA.s.isStatic) continue;
-
-            for (bodies[iA + 1 .. bodies.len]) |*bodyB| {
-                const result = bodyA.checkCollision(bodyB);
-
-                switch (result) {
-                    .collision => |collision| {
-                        //                        const event = CollisionEvent{
-                        //                            .entityA = bodyA.key,
-                        //                            .entityB = bodyB.key,
-                        //                            .collision = collision,
-                        //                        };
-                        //                        self.emitCollisionEvent(collision);
-                        self.emitCollisionEvent(collision);
-                    },
-                    .noCollision => continue,
+                if (config.dynamic_collision_system != .none) {
+                    self.updateCollisions();
+                    self.resolveCollisions();
                 }
             }
         }
-    }
 
-    fn resolveCollisions(self: *PhysicsSystem) void {
-        const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneNC(@src(), "resolve collisions", 0xff_00_00_00) else null;
-        defer if (zone) |z| z.End();
+        fn updatePositions(self: *@This(), dt: f32) void {
+            const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneNC(@src(), "update positions", 0xff_00_00_00) else null;
+            defer if (zone) |z| z.End();
 
-        for (self.collisionEvents[numberOfResolvedCollisions..numberOfCollisionEvents]) |*collision| {
-            if (self.collisionGroups.isCollisionEnabledFor(collision.bodyA.key, collision.bodyB.key)) {
-                resolveCollision(collision);
+            self.bodyContainer.updatePositions(dt);
+
+            //self.removeFarBodies();
+
+            for (self.view.data()) |entity| {
+                const body = self.view.get(entity);
+                body.updateTransform();
+
+                if (config.physics.collision.dynamic_bodies_algorithm == .rTree) {
+                    self.collisionContainer.updateBody(entity);
+                }
+            }
+
+            if (config.physics.collision.dynamic_bodies_algorithm == .rTree) {
+                self.collisionContainer.sync();
             }
         }
 
-        numberOfResolvedCollisions = numberOfCollisionEvents;
-    }
-
-    fn emitCollisionEvent(self: *PhysicsSystem, collision: Collision) void {
-        self.collisionEvents[numberOfCollisionEvents] = collision;
-        numberOfCollisionEvents += 1;
-    }
-
-    pub fn pollCollisions(
-        self: PhysicsSystem,
-        comptime T: type,
-        context: T,
-        onEvent: fn (context: T, collisionEvent: Collision) bool,
-    ) void {
-        for (0..numberOfCollisionEvents) |i| {
-            if (onEvent(context, self.collisionEvents[i])) break;
+        fn updatePrevAccelerations(self: *@This()) void {
+            for (self.view.raw()) |*body| {
+                body.d.pa = body.d.cloneAccel();
+            }
         }
 
-        numberOfCollisionEvents = 0;
-    }
+        fn removeFarBodies(self: *@This()) void {
+            for (self.view.data()) |entity| {
+                const body = self.view.getConst(entity);
+                if (body.d.p.x.* < -cfg.sizeHalfW or
+                    body.d.p.x.* > cfg.sizeHalfW or
+                    body.d.p.y.* < -cfg.sizeHalfH or
+                    body.d.p.y.* > cfg.sizeHalfH)
+                {
+                    self.removeRigidBody(entity);
+                }
+            }
+        }
 
-    /// Result is owned by caller
-    pub fn findIntersectionsBody(
-        self: PhysicsSystem,
-        body: *RigidBody,
-    ) []Intersection(ecs.Entity) {
-        return self.collisionContainer.intersectingBody(body.*);
-    }
+        fn wrapPositions(body: *RigidBody) void {
+            if (body.d.p.x < -cfg.sizeHalfW) {
+                body.d.p.x = -body.d.p.x;
+            }
 
-    /// Result is owned by caller
-    pub fn findIntersectionsRect(
-        self: PhysicsSystem,
-        rect: AABB,
-    ) []Intersection(ecs.Entity) {
-        return self.collisionContainer.intersectingAABB(rect);
-    }
+            if (body.d.p.x > cfg.sizeHalfW) {
+                body.d.p.x = -body.d.p.x;
+            }
 
-    /// Result is owned by caller
-    pub fn findIntersectionsCircle(
-        self: PhysicsSystem,
-        radius: f32,
-        offset: Vector,
-    ) []Intersection(ecs.Entity) {
-        var circle = Circle.init(radius);
-        circle.offset = offset;
-        circle.updateTransform(V.zero, 0, 1);
-        return self.collisionContainer.intersectingCircle(circle);
-    }
+            if (body.d.p.y < -cfg.sizeHalfH) {
+                body.d.p.y = body.d.p.y;
+            }
 
-    /// Result is owned by caller
-    pub fn findIntersectionsLine(
-        self: PhysicsSystem,
-        start: Vector,
-        end: Vector,
-    ) []Intersection(ecs.Entity) {
-        return self.collisionContainer.intersectingLine(start, end);
-    }
+            if (body.d.p.y > cfg.sizeHalfH) {
+                body.d.p.y = body.d.p.y;
+            }
+        }
 
-    const AddRigidBodyOptions = struct {
-        pos: Vector = V.zero,
-        scale: f32 = 1,
+        fn updateCollisions(self: *@This(), subStep: usize) void {
+            const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneNC(@src(), "update collisions", 0xff_00_00_00) else null;
+            defer if (zone) |z| z.End();
+
+            // const bodies = self.view.raw();
+
+            // zone.Text("Bodies:");
+            // zone.Value(bodies.len);
+
+            switch (config.getDynamicBodiesAlgorithm()) {
+                // .bruteForce => self.updateCollisionsBruteForce(),
+                .rTree => self.updateCollisionsWithContainer(),
+                // .sweep => self.updateCollisionSweep(),
+                .quadTree => self.updateCollisionsWithContainerQT(
+                    if (subStep == 0)
+                        .build(self.boundary)
+                    else
+                        .check,
+                    // .build(self.boundary),
+                ),
+            }
+        }
+
+        fn updateCollisionsWithContainer(self: *@This()) void {
+            for (self.view.data()) |entity| {
+                const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneN(@src(), "uc entity") else null;
+                defer if (zone) |z| z.End();
+                const body = self.view.get(entity);
+                if (body.s.isStatic) continue;
+                self.collisionContainer.checkCollisionRTree(body, entity, self, emitCollisionEvent);
+            }
+        }
+
+        fn updateCollisionsWithContainerQT(
+            self: *@This(),
+            options: CC.CheckCollisionQTOptions,
+        ) void {
+            const collisions = self.collisionContainer.checkCollisionQT(options);
+
+            for (collisions) |collision| {
+                self.emitCollisionEvent(collision);
+            }
+        }
+
+        fn updateCollisionSweep(self: *@This()) void {
+            const bodies = self.view.raw();
+            const allocator = self.reg.singletons().getConst(Allocator);
+            self.sweepLineBuffer.ensureTotalCapacityPrecise(allocator, bodies.len * 2) catch unreachable;
+            self.sweepLineBuffer.expandToCapacity();
+            self.overlappingBuffer.ensureTotalCapacityPrecise(allocator, bodies.len * 2) catch unreachable;
+            self.overlappingBuffer.expandToCapacity();
+
+            sweep(
+                RigidBody,
+                bodies,
+                self.sweepLineBuffer.items,
+                self.overlappingBuffer.items,
+                self,
+                getAabb,
+                onAxisOverlap,
+            );
+        }
+
+        fn getAabb(_: *@This(), entry: RigidBody) AABB {
+            return entry.aabb;
+        }
+
+        fn onAxisOverlap(self: *@This(), a: usize, bs: []bool, n: usize, _: []const RigidBody) void {
+            const bodyA = &self.view.raw()[a];
+            var left = n;
+
+            for (0.., bs) |i, b| {
+                if (!b or left <= 0) continue;
+                const bodyB = &self.view.raw()[i];
+
+                switch (bodyA.checkCollision(bodyB)) {
+                    .noCollision => {},
+                    .collision => |collision| self.emitCollisionEvent(collision),
+                }
+
+                left -= 1;
+            }
+        }
+
+        fn updateCollisionsBruteForce(self: *@This()) void {
+            const bodies = self.view.raw();
+
+            if (bodies.len == 0) return;
+
+            for (0.., bodies[0 .. bodies.len - 1]) |iA, *bodyA| {
+                if (bodyA.s.isStatic) continue;
+
+                for (bodies[iA + 1 .. bodies.len]) |*bodyB| {
+                    const result = bodyA.checkCollision(bodyB);
+
+                    switch (result) {
+                        .collision => |collision| {
+                            //                        const event = CollisionEvent{
+                            //                            .entityA = bodyA.key,
+                            //                            .entityB = bodyB.key,
+                            //                            .collision = collision,
+                            //                        };
+                            //                        self.emitCollisionEvent(collision);
+                            self.emitCollisionEvent(collision);
+                        },
+                        .noCollision => continue,
+                    }
+                }
+            }
+        }
+
+        fn resolveCollisions(self: *@This()) void {
+            const zone: ?ztracy.ZoneCtx = if (isTracingEnabled) ztracy.ZoneNC(@src(), "resolve collisions", 0xff_00_00_00) else null;
+            defer if (zone) |z| z.End();
+
+            for (self.collisionEvents[numberOfResolvedCollisions..numberOfCollisionEvents]) |*collision| {
+                if (self.collisionGroups.isCollisionEnabledFor(collision.bodyA.key, collision.bodyB.key)) {
+                    resolveCollision(collision);
+                }
+            }
+
+            numberOfResolvedCollisions = numberOfCollisionEvents;
+        }
+
+        fn emitCollisionEvent(self: *@This(), collision: Collision) void {
+            self.collisionEvents[numberOfCollisionEvents] = collision;
+            numberOfCollisionEvents += 1;
+        }
+
+        pub fn pollCollisions(
+            self: @This(),
+            comptime T: type,
+            context: T,
+            onEvent: fn (context: T, collisionEvent: Collision) bool,
+        ) void {
+            for (0..numberOfCollisionEvents) |i| {
+                if (onEvent(context, self.collisionEvents[i])) break;
+            }
+
+            numberOfCollisionEvents = 0;
+        }
+
+        /// Result is owned by caller
+        pub fn findIntersectionsBody(
+            self: @This(),
+            body: *RigidBody,
+        ) []Intersection(ecs.Entity) {
+            return self.collisionContainer.intersectingBody(body.*);
+        }
+
+        /// Result is owned by caller
+        pub fn findIntersectionsRect(
+            self: @This(),
+            rect: AABB,
+        ) []Intersection(ecs.Entity) {
+            return self.collisionContainer.intersectingAABB(rect);
+        }
+
+        /// Result is owned by caller
+        pub fn findIntersectionsCircle(
+            self: @This(),
+            radius: f32,
+            offset: Vector,
+        ) []Intersection(ecs.Entity) {
+            var circle = Circle.init(radius);
+            circle.offset = offset;
+            circle.updateTransform(V.zero, 0, 1);
+            return self.collisionContainer.intersectingCircle(circle);
+        }
+
+        /// Result is owned by caller
+        pub fn findIntersectionsLine(
+            self: @This(),
+            start: Vector,
+            end: Vector,
+        ) []Intersection(ecs.Entity) {
+            return self.collisionContainer.intersectingLine(start, end);
+        }
+
+        const AddRigidBodyOptions = struct {
+            pos: Vector = V.zero,
+            scale: f32 = 1,
+        };
+
+        pub fn addRigidBody(
+            self: *@This(),
+            entity: ecs.Entity,
+            options: AddRigidBodyOptions,
+            static: RigidBodyStaticParams,
+        ) *RigidBody {
+            const entityId = entity.index;
+            var isPointersInvalidated: bool = false;
+
+            self.bodyContainer.setRigidBody(
+                entityId,
+                options.pos,
+                V.init(0, 0),
+                V.init(0, 0),
+                0,
+                0,
+                0,
+                static.isStatic,
+                &isPointersInvalidated,
+            );
+
+            if (isPointersInvalidated) {
+                std.log.info("RIGID BODY POINTERS INVALIDATED", .{});
+                self.updateRigidBodiesInRegistry();
+            }
+
+            const dynamic = self.bodyContainer.getRigidBody(entityId);
+
+            self.reg.add(entity, RigidBody.init(entity, static, dynamic));
+            const body = self.view.get(entity);
+            body.d.s = options.scale;
+
+            if (body.s.isStatic) {
+                body.s.density = std.math.inf(f32);
+            }
+
+            if (config.getDynamicBodiesAlgorithm() == .rTree) {
+                self.collisionContainer.insertBody(entity);
+            }
+
+            return body;
+        }
+
+        pub fn removeRigidBody(self: *@This(), allocator: Allocator, entity: ecs.Entity) void {
+            if (config.getDynamicBodiesAlgorithm() == .rTree) {
+                self.collisionContainer.removeBody(entity);
+            }
+            self.bodyContainer.removeRigidBody(entity.index);
+            self.collisionGroups.removeFromAllGroups(allocator, entity);
+            self.reg.remove(RigidBody, entity);
+        }
+
+        fn updateRigidBodiesInRegistry(self: *@This()) void {
+            const view = self.reg.basicView(RigidBody);
+
+            for (view.data()) |entity| {
+                const body = view.get(entity);
+                const id = entity.index;
+                self.bodyContainer.updateRigidBodyPointers(id, &body.d);
+            }
+        }
     };
-
-    pub fn addRigidBody(
-        self: *PhysicsSystem,
-        entity: ecs.Entity,
-        options: AddRigidBodyOptions,
-        static: RigidBodyStaticParams,
-    ) *RigidBody {
-        const entityId = entity.index;
-        var isPointersInvalidated: bool = false;
-
-        self.bodyContainer.setRigidBody(
-            entityId,
-            options.pos,
-            V.init(0, 0),
-            V.init(0, 0),
-            0,
-            0,
-            0,
-            static.isStatic,
-            &isPointersInvalidated,
-        );
-
-        if (isPointersInvalidated) {
-            std.log.info("RIGID BODY POINTERS INVALIDATED", .{});
-            self.updateRigidBodiesInRegistry();
-        }
-
-        const dynamic = self.bodyContainer.getRigidBody(entityId);
-
-        self.reg.add(entity, RigidBody.init(entity, static, dynamic));
-        const body = self.view.get(entity);
-        body.d.s = options.scale;
-
-        if (body.s.isStatic) {
-            body.s.density = std.math.inf(f32);
-        }
-
-        if (collisionType == .rTree) {
-            self.collisionContainer.insertBody(entity);
-        }
-
-        return body;
-    }
-
-    pub fn removeRigidBody(self: *PhysicsSystem, allocator: Allocator, entity: ecs.Entity) void {
-        if (collisionType == .rTree) {
-            self.collisionContainer.removeBody(entity);
-        }
-        self.bodyContainer.removeRigidBody(entity.index);
-        self.collisionGroups.removeFromAllGroups(allocator, entity);
-        self.reg.remove(RigidBody, entity);
-    }
-
-    fn updateRigidBodiesInRegistry(self: *PhysicsSystem) void {
-        const view = self.reg.basicView(RigidBody);
-
-        for (view.data()) |entity| {
-            const body = view.get(entity);
-            const id = entity.index;
-            self.bodyContainer.updateRigidBodyPointers(id, &body.d);
-        }
-    }
-};
+}

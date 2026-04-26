@@ -9,6 +9,7 @@ const RigidBody = @import("rigid-body-flat.zig").RigidBodyFlat;
 
 const CollisionResult = @import("collision/result.zig").CollisionResult;
 const Collision = @import("collision/result.zig").Collision;
+const CollisionStatic = @import("collision/result.zig").CollisionStatic;
 
 const SAT = @import("collision/sat.zig");
 const AABB = @import("collision/aabb.zig");
@@ -65,4 +66,28 @@ pub fn resolveCollision(collision: *Collision) void {
         bodyA.d.setPos(pA - normal * V.scalar(depth / 2));
         bodyB.d.setPos(pB + normal * V.scalar(depth / 2));
     }
+}
+
+pub fn resolveCollisionStatic(collision: *CollisionStatic) void {
+    const normal = collision.normal;
+    const depth = collision.depth;
+    const body = collision.body;
+
+    const v = body.d.cloneVel();
+    const p = body.d.clonePos();
+    const mass = body.s.mass();
+    const e = body.s.restitution;
+
+    collision.velocity = v;
+
+    const relV = -v;
+
+    //const j = relV.scale(-(1 + e)).dot(normal) / ((1 / massA) + (1 / massB));
+
+    const ja = V.dot(relV * V.scalar(-(1 + e)), normal);
+    const j = ja * mass;
+
+    const resolution = v - normal * V.scalar(j / mass);
+    body.d.setVel(resolution);
+    body.d.setPos(p - normal * V.scalar(depth));
 }

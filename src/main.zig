@@ -28,6 +28,8 @@ pub fn main(init: std.process.Init) !void {
     var reg = ecs.Registry.init(allocator);
     defer reg.deinit();
 
+    reg.singletons().add(io);
+
     var scene = DebugScene.init(allocator, &reg);
     defer scene.deinit();
     scene.bind();
@@ -39,6 +41,26 @@ pub fn main(init: std.process.Init) !void {
     //     V.init(V.x(cfg.size) * 0.7, 40),
     //     true,
     // );
+
+    var rand = std.Random.DefaultPrng.init(0);
+
+    for (0..200) |i| {
+        _ = i;
+        scene.addRectangle(
+            V.random(&rand) * V.scalar(1000) - V.scalar(500),
+            V.init(32, 32),
+            true,
+        );
+    }
+
+    for (0..30) |i| {
+        _ = i;
+        scene.addRectangle(
+            V.init(32, 100),
+            V.init(3, 3),
+            false,
+        );
+    }
 
     const sizeInt = V.toInt(i32, cfg.size);
     rl.initWindow(sizeInt[0], sizeInt[1], "Zig Game Engine Test");

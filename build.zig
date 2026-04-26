@@ -1,9 +1,10 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    // const options = .{
-    //     // .enable_ztracy = b.option(bool, "enable_ztracy", "Enable Tracy profile markers") orelse false,
-    // };
+    const options = .{
+        .enable_ztracy = b.option(bool, "enable_ztracy", "Enable Tracy profile markers") orelse false,
+        .enable_ztracy_fibers = b.option(bool, "enable_ztracy_fibers", "Enable ztracy fibers") orelse false,
+    };
 
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -18,15 +19,18 @@ pub fn build(b: *std.Build) void {
         .rmodels = false,
     });
 
-    // const ztracy_dep = b.dependency("ztracy", .{
-    //     .enable_ztracy = options.enable_ztracy,
-    // });
-    // const ztracy = ztracy_dep.module("root");
-    const ztracy = b.createModule(.{
+    const ztracy_dep = b.dependency("ztracy", .{
         .target = target,
         .optimize = optimize,
-        .root_source_file = b.path("ztracy/ztracy.zig"),
+        .enable_ztracy = options.enable_ztracy,
+        .enable_fibers = options.enable_ztracy_fibers,
     });
+    const ztracy = ztracy_dep.module("root");
+    // const ztracy = b.createModule(.{
+    //     .target = target,
+    //     .optimize = optimize,
+    //     .root_source_file = b.path("ztracy/ztracy.zig"),
+    // });
 
     const ecs_dep = b.dependency("entt", .{
         .target = target,
@@ -34,7 +38,7 @@ pub fn build(b: *std.Build) void {
     });
     const ecs = ecs_dep.module("zig-ecs");
 
-    _ = b.addModule("zge", .{
+    const zge = b.addModule("zge", .{
         .root_source_file = b.path("src/zge.zig"),
         .imports = &.{
             .{
@@ -85,10 +89,11 @@ pub fn build(b: *std.Build) void {
     // exe.root_module.addImport("ecs", ecs);
     // zge.addImport("ecs", ecs);
     // exe.root_module.addImport("ztracy", ztracy);
-    // exe.linkLibrary(ztracy_dep.artifact("tracy"));
-    // zge.addImport("ztracy", ztracy);
+    exe.root_module.linkLibrary(ztracy_dep.artifact("tracy"));
+    zge.linkLibrary(ztracy_dep.artifact("tracy"));
 
     b.installArtifact(exe);
+    // b.installArtifact(ztracy_dep.artifact("tracy"));
 
     const run_cmd = b.addRunArtifact(exe);
 
